@@ -19,14 +19,21 @@ than no guidance.
 | `project.godot` | Godot project config. `[dotnet] project/assembly_name` **must match** the csproj file name (`project-enchanter`, no spaces) or C# scripts fail to instantiate at runtime. |
 | `project-enchanter.csproj` | Godot.NET.Sdk 4.7.2, net8.0. `tests\**` is excluded from this build. |
 | `main.tscn` | Main (only) scene. Root `Node2D` "Main" with `DrawingSurface` attached. |
-| `scripts/DrawingSurface.cs` | Godot node. Handles input and rendering only; delegates stroke logic to `DrawingSurfaceModel` and casting to `RuneRecognizer`. |
-| `scripts/DrawingSurfaceModel.cs` | Pure C# class — drawing/undo logic. No Godot node dependencies; unit-testable. |
-| `scripts/RuneRecognizer.cs` | Pure C# — $P point-cloud rune recognition (position/scale/rotation invariant). See "Recognition pipeline". |
+| `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, and the red "cast" flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
+| `scripts/DrawingSurfaceModel.cs` | Pure C# — drawing/undo logic. No Godot node dependencies; unit-testable. |
+| `scripts/RuneFeatures.cs` | Pure C# — drawing → feature vector (resample, smooth, PCA-canonicalize, structural stats). Must mirror the Python trainer; guarded by a parity test. |
+| `scripts/RuneModel.cs` | Pure C# — MLP forward pass + feature standardization. |
+| `scripts/RuneClassifier.cs` | Public classification API (`Recognize` / `RecognizeDetailed`) with the cast threshold. |
+| `scripts/RuneModelWeights.g.cs` | **Generated** by `tools/train_rune_model.py` — do not edit by hand. |
 | `scripts/RuneTemplate.cs` | Pure C# record: a named rune and its reference strokes. |
-| `scripts/RuneTemplates.cs` | Built-in rune definitions (currently `Fire`). Coordinates are arbitrary units — the recognizer normalizes everything. |
+| `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test (currently `Fire`, a caret). |
+| `scripts/RecognitionSelfTest.cs` | In-engine automated test driver, run as a scene (see "Testing in engine"). |
 | `tests/project-enchanter.tests.csproj` | xUnit test project (net8.0). |
 | `tests/DrawingSurfaceModelTests.cs` | Unit/regression tests for the drawing model. |
-| `tests/RuneRecognizerTests.cs` | Unit/regression tests for recognition, incl. invariance (translation/scale/rotation) and rejection cases. |
+| `tests/RuneFeaturesTests.cs` | Feature pipeline tests incl. invariance + Python-trainer parity. |
+| `tests/RuneClassifierTests.cs` | Classifier tests: invariance, hand-drawn tolerance, rejection. |
+| `tests/recognition_self_test.tscn` | Scene that runs `RecognitionSelfTest` in-engine. |
+| `tools/train_rune_model.py` | Trains the MLP (numpy) and regenerates `RuneModelWeights.g.cs`. |
 
 ## Design principle: keep logic out of the node
 
@@ -41,35 +48,53 @@ When adding new gameplay features:
 2. Have the node delegate to it and just call `QueueRedraw()` on changes.
 3. Write tests against the pure class.
 
-## Recognition pipeline (RuneRecognizer)
+## Classification pipeline (trained model)
 
-How a drawing becomes a rune match:
+The runes are recognized by a small **neural network** (MLP, numpy-trained,
+weights compiled in). Pipeline:
 
-1. **Resample** — each stroke is redrawn as points evenly spaced by arc length; points per stroke are allocated proportional to stroke length (48 total).
-2. **Smooth** — a small moving-average filter (2 passes) reduces per-point hand jitter.
-3. **Normalize** — the combined point cloud is translated to its centroid and scaled so the **RMS distance from the centroid** is 1. RMS radius (not bounding box) is mandatory: bounding boxes change under rotation and would break rotation invariance.
-4. **Match** — greedy nearest-neighbour cloud distance ($P style), tried over 24 rotations (every 15°); the smaller of the two match directions wins.
-5. **Guard** — a template is skipped if the drawing has fewer strokes than the template (a half-drawn rune must not fire).
-6. **Threshold** — `MatchThreshold = 2.0` in the normalized unit space (caret fire rune). Calibration: realistic hand jitter measures < 1.0 (avg ≈ 0.57 at ±3% wobble); generic shapes (circle ≈ 8.5, square ≈ 8.4, triangle ≈ 5.5, line ≈ 12) measure far above. Retune by measuring, not guessing. Note: rotation invariance means an upside-down caret (a "V") also matches fire — acceptable for now, revisit if shapes conflict.
+1. **Resample** — strokes → points evenly spaced by arc length (48 total, split proportional to stroke length).
+2. **Smooth** — 1-2-1 moving average, 2 passes (per-stroke).
+3. **Canonicalize** — centroid at origin, RMS radius 1, rotate onto the PCA axis. The axis sign is ambiguous: resolve the 180° flip deterministically via radius-weighted x skew, then emit two mirror variants (the model averages their predictions).
+4. **Structural features** — eigenvalue ratio (thinness), path/RMS, corner fraction, sharpest turn.
+5. **Standardize + MLP** — z-score using trainer-provided mean/std, then 100 → 96 (ReLU) → classes (softmax).
+6. **Classify** — argmax over the non-"unknown" classes; cast when probability ≥ `RuneClassifier.MatchThreshold` (0.6). All-zero (degenerate) feature vectors are rejected outright.
+7. **Feedback** — on a cast, the node flashes a full-screen red overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7); both are `[Export]` tunables on `DrawingSurface`.
 
-For testing, `RecognizeDetailed` returns the best candidate and confidence
-**even when below the threshold** (and `Matched = false`); the HUD in
-`DrawingSurface._Draw` shows it live: stroke count, best match + confidence
-("cast!" in gold when over threshold), and the last successful cast. Note:
-a drawing with too few strokes reports *no* candidate (the stroke guard runs
-before scoring) — the HUD's stroke count is the feedback for that case.
+Current model (caret fire rune): held-out accuracy ≈ 99.6%, fire recall ≈ 99.7%.
+
+### Retraining and changing runes
+
+```sh
+pip install numpy
+python tools/train_rune_model.py     # regenerates scripts/RuneModelWeights.g.cs
+```
+
+- Training data is synthesized in the script: the rune template(s) from `RuneTemplates.cs` (mirrored manually in Python as `FIRE`) plus augmentation (rotation, scale, translation, jitter, densification) and an "unknown" class of scribbles/letters/shapes.
+- **When adding a rune**: add its points to `tools/train_rune_model.py` (training shapes) *and* `scripts/RuneTemplates.cs` (self-test/UI reference), add it to `OUTPUT_NAMES`, retrain, then add classifier tests for it.
+- **Do not hand-edit `RuneModelWeights.g.cs`** — it is generated.
+- **Parity guard**: the trainer embeds a reference feature vector (`ParityFeatures`) computed for the fire template; `RuneFeaturesTests.Extract_MatchesPythonTrainerParitySample` fails if the C# feature code drifts. If you change `RuneFeatures.cs`, change `extract_features` in the trainer identically and retrain.
 
 Gotchas learned the hard way (do not regress these):
 
-- `ResamplePolyline` must walk cumulative arc length — naive per-segment stepping drifts and scrambles point order for dense input.
-- Do not "interpolate" points as `(a + b) * t` — that is not on the segment; use `a.Lerp(b, t)`.
-- `new List<Vector2>(capacity) { [0] = x }` throws: capacity ≠ count. Initialize then assign or add.
+- PCA axes have no sign — features were not rotation-invariant until the skew-based flip was added.
+- Degenerate drawings (single point / zero size) produce all-zero features, which are out of distribution (the old model scored them "fire"); always reject them before inference.
+- Absolute jitter on a small shape is disproportionately large: generate test jitter relative to the glyph size.
+- Features must be standardized before the MLP; unstandardized structural features dominate training.
+- Synthetic "scribbles" must be realistic (continuous wandering strokes, spirals, waves) — spiky random jumps are not representative and poison the unknown class.
 
-### Adding a new rune
+## Testing in engine
 
-1. Define its stroke points in `RuneTemplates.cs` (any unit space; shape is all that matters — match the reference picture approximately).
-2. Add tests mirroring `RuneRecognizerTests`: template match, translation/scale/rotation invariance, rejection of scribbles, and a full-session regression through `DrawingSurfaceModel`.
-3. If recognition is too strict/lenient in playtests, adjust `MatchThreshold` and re-measure the calibration numbers above.
+The in-engine self-test drives the real `DrawingSurface` (input → model → features → classifier) and prints `SELFTEST` lines:
+
+```sh
+dotnet build    # REQUIRED: Godot loads the prebuilt DLL; it does not compile
+# then run res://tests/recognition_self_test.tscn in the Godot editor,
+# or via the godot MCP: run_project(scene: "res://tests/recognition_self_test.tscn")
+# and read the log with get_debug_output / the app_userdata log file.
+```
+
+It covers fire at various transforms (expect cast **and** red flash) and circle/line/wave (expect no cast and no flash). **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
 
 ## Commands
 
@@ -79,6 +104,9 @@ dotnet build
 
 # Run the tests
 dotnet test tests\project-enchanter.tests.csproj
+
+# Retrain the rune classifier (regenerates scripts/RuneModelWeights.g.cs)
+python tools/train_rune_model.py
 
 # Run the game: press F5 inside the Godot editor (Rider alone will not launch it)
 ```
@@ -97,7 +125,11 @@ when something "doesn't work" at runtime.
 | An existing rule in `DrawingSurfaceModel` (thresholds, filtering, undo, etc.) | Update the existing test(s) that pin the old behavior, and note the behavior change in the test name or a comment. |
 | Added a new method / state to `DrawingSurfaceModel` | Add tests for the happy path, the guard/edge cases (empty state, in-progress stroke, no-op cases), and one end-to-end "full session" test exercising it with the existing methods. |
 | Added a new pure class | Create a new test class `Tests/<ClassName>Tests.cs` following the same structure (helper factory, sections grouped by behavior, regression tests). |
-| Changed `DrawingSurface` (node) only — input mapping, rendering | Pure engine behavior is not unit-testable. Verify manually in Godot (F5) and note it; do not fake engine tests with mocks. If the change altered *when* the model is called, check that the model tests still cover the new sequence. |
+| Changed `DrawingSurface` (node) only — input mapping, rendering | Pure engine behavior is not unit-testable. Verify with the in-engine self-test scene and/or manually in Godot (F5); do not fake engine tests with mocks. If the change altered *when* the classifier is called, check that the model tests still cover the new sequence. |
+| Changed `RuneFeatures.cs` (feature math) | Mirror the change in `tools/train_rune_model.py`'s `extract_features`, retrain (this refreshes the parity sample), and re-run the invariance tests. The parity test will catch drift otherwise. |
+| Changed the model/training (shapes, augmentation, architecture, epochs) | Retrain, check held-out accuracy in the trainer output, and re-run `RuneClassifierTests`. Keep held-out accuracy ≳ 99% and fire recall ≳ 98%. |
+| Changed `RuneClassifier` threshold or API | Update the threshold-related tests and the HUD self-test expectations. |
+| Added a rune | See "Retraining and changing runes": trainer `FIRE`/shapes + `OUTPUT_NAMES` + `RuneTemplates.cs` + retrain + classifier tests for the new rune and rejection of the others. |
 | Renamed / deleted a class or method | Update all references in `tests/` in the same change — the build must stay green. |
 | Changed exported tunables (e.g. `MinPointDistance` default) | Update any test that relied on the default and any test names mentioning the value. |
 

@@ -7,3 +7,5 @@ riderModule.iml
 .godot/
 tests/bin/
 tests/obj/
+__pycache__/
+**/tools/last_weights.npz

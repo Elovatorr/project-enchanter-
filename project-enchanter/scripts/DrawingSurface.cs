@@ -10,24 +10,60 @@ namespace ProjectEnchanter;
 public partial class DrawingSurface : Node2D
 {
     private readonly DrawingSurfaceModel _model = new();
-    private readonly RuneRecognizer _recognizer = new();
+    private readonly RuneClassifier _classifier = new();
     private string? _lastCast;
     private string? _candidate;
+    private ColorRect? _flashRect;
+    private Tween? _flashTween;
 
     [Export] public Color StrokeColor { get; set; } = Colors.White;
     [Export] public float StrokeWidth { get; set; } = 4.0f;
+    [Export] public float FlashThreshold { get; set; } = 0.7f;
+    [Export] public float FlashDuration { get; set; } = 0.5f;
+    [Export] public Color FlashColor { get; set; } = new(1f, 0.1f, 0.05f, 0.55f);
     [Export] public float MinPointDistance
     {
         get => _model.MinPointDistance;
         set => _model.MinPointDistance = value;
     }
 
+    public string? LastCast => _lastCast;
+    public string? Candidate => _candidate;
+    public int CastCount { get; private set; }
+    public int FlashCount { get; private set; }
+    public bool IsFlashing => _flashTween is { } tween && tween.IsRunning();
+
+    public override void _Ready()
+    {
+        // Full-screen overlay used for the "cast succeeded" flash. Lives on its
+        // own CanvasLayer so it covers the canvas regardless of camera/zoom.
+        CanvasLayer layer = new() { Layer = 100 };
+        AddChild(layer);
+        _flashRect = new ColorRect
+        {
+            Color = new Color(FlashColor.R, FlashColor.G, FlashColor.B, 0f),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _flashRect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        layer.AddChild(_flashRect);
+    }
+    public int StrokeCount => _model.Strokes.Count;
+    public int PointCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (IReadOnlyList<Vector2> stroke in _model.Strokes) n += stroke.Count;
+            return n;
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         switch (@event)
         {
-            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }:
-                _model.BeginStroke(GetPointerPosition());
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
+                _model.BeginStroke(CanvasPosition(press));
                 QueueRedraw();
                 break;
 
@@ -41,26 +77,30 @@ public partial class DrawingSurface : Node2D
                 if (_model.UndoLastStroke()) TryCast();
                 break;
 
-            case InputEventMouseMotion when _model.IsDrawing:
-                _model.AppendPoint(GetPointerPosition());
+            case InputEventMouseMotion motion when _model.IsDrawing:
+                _model.AppendPoint(CanvasPosition(motion));
                 QueueRedraw();
                 break;
         }
     }
 
-    private Vector2 GetPointerPosition()
-    {
-        // Invert the canvas transform so drawing stays correct if a camera is added later.
-        return GetCanvasTransform().AffineInverse() * GetViewport().GetMousePosition();
-    }
+    /// <summary>
+    /// Converts a mouse event's viewport position into canvas coordinates, so
+    /// drawing stays correct if a camera (zoom/pan) is added later. Using the
+    /// event's own position (instead of polling the mouse) keeps this working
+    /// with synthetic input and touch events too.
+    /// </summary>
+    private Vector2 CanvasPosition(InputEventMouse e)
+        => GetCanvasTransform().AffineInverse() * e.Position;
 
     /// <summary>
-    /// Runs after each completed stroke: updates the on-screen recognition HUD,
-    /// and if the strokes match a rune, casts it (name shown, canvas cleared).
+    /// Runs after each completed stroke: updates the on-screen classification
+    /// HUD, and if the strokes are recognized as a rune, casts it (name shown,
+    /// canvas cleared for the next drawing).
     /// </summary>
     private void TryCast()
     {
-        RuneDiagnostics diagnostics = _recognizer.RecognizeDetailed(_model.Strokes);
+        RuneDiagnostics diagnostics = _classifier.RecognizeDetailed(_model.Strokes);
 
         _candidate = diagnostics.Name is null
             ? $"no candidate · {_model.Strokes.Count} stroke(s)"
@@ -70,15 +110,37 @@ public partial class DrawingSurface : Node2D
         if (diagnostics.Matched)
         {
             _lastCast = $"{diagnostics.Name} ({diagnostics.Confidence:P0})";
+            CastCount++;
             _model.Clear();
             _candidate = null;
+
+            // Flash the screen when the model is confident the rune was drawn.
+            if (diagnostics.Confidence > FlashThreshold)
+            {
+                FlashScreen();
+            }
         }
         QueueRedraw();
     }
 
+    /// <summary>Flashes the full-screen overlay for <see cref="FlashDuration"/> seconds.</summary>
+    private void FlashScreen()
+    {
+        if (_flashRect is null) return;
+
+        _flashTween?.Kill();
+        _flashRect.Color = FlashColor;
+        FlashCount++;
+
+        _flashTween = CreateTween();
+        _flashTween.TweenProperty(_flashRect, "color:a", 0f, FlashDuration)
+            .SetTrans(Tween.TransitionType.Quad)
+            .SetEase(Tween.EaseType.Out);
+    }
+
     public override void _Draw()
     {
-        // Recognition HUD (top-left): live candidate info + last successful cast.
+        // Classification HUD (top-left): live candidate info + last successful cast.
         Font font = ThemeDB.FallbackFont;
         DrawString(font, new Vector2(16, 30),
             $"Drawing: {_model.Strokes.Count} stroke(s)", HorizontalAlignment.Left, -1, 22, Colors.LightGray);

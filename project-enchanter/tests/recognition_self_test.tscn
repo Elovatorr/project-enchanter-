@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c1selftest01"]
+
+[ext_resource type="Script" path="res://scripts/RecognitionSelfTest.cs" id="1_selftest"]
+
+[node name="SelfTestRoot" type="Node" unique_id=684302001]
+script = ExtResource("1_selftest")
