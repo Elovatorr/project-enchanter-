@@ -1,6 +1,10 @@
-[gd_scene load_steps=14 format=3 uid="uid://b7room3dscene"]
+[gd_scene load_steps=22 format=3 uid="uid://b7room3dscene"]
 
 [ext_resource type="Script" path="res://scripts/PlayerController.cs" id="1_player"]
+[ext_resource type="Script" path="res://scripts/EnchantingTable.cs" id="2_table"]
+[ext_resource type="Script" path="res://scripts/Wand.cs" id="3_wand"]
+[ext_resource type="Script" path="res://scripts/Hud.cs" id="4_hud"]
+[ext_resource type="Script" path="res://scripts/EnchantingUI.cs" id="5_ui"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 14)
@@ -34,6 +38,18 @@ size = Vector3(2.4, 1, 1.2)
 
 [sub_resource type="BoxShape3D" id="BoxShape_table"]
 size = Vector3(2.4, 1, 1.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wand"]
+size = Vector3(0.06, 0.06, 0.55)
+
+[sub_resource type="BoxShape3D" id="BoxShape_wand"]
+size = Vector3(0.06, 0.06, 0.55)
+
+[sub_resource type="StandardMaterial3D" id="Mat_wand"]
+albedo_color = Color(0.62, 0.42, 0.2, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_decal"]
+size = Vector2(0.055, 0.5)
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
 radius = 0.4
@@ -97,6 +113,7 @@ shape = SubResource("BoxShape_wall_x")
 
 [node name="EnchantingTable" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, -3)
+script = ExtResource("2_table")
 
 [node name="Mesh" type="MeshInstance3D" parent="EnchantingTable"]
 mesh = SubResource("BoxMesh_table")
@@ -104,6 +121,22 @@ material_override = SubResource("Mat_table")
 
 [node name="Collision" type="CollisionShape3D" parent="EnchantingTable"]
 shape = SubResource("BoxShape_table")
+
+[node name="Wand" type="StaticBody3D" parent="."]
+transform = Transform3D(0.9397, 0, 0.342, 0, 1, 0, -0.342, 0, 0.9397, 2, 1.04, -3)
+script = ExtResource("3_wand")
+
+[node name="Mesh" type="MeshInstance3D" parent="Wand"]
+mesh = SubResource("BoxMesh_wand")
+material_override = SubResource("Mat_wand")
+
+[node name="Collision" type="CollisionShape3D" parent="Wand"]
+shape = SubResource("BoxShape_wand")
+
+[node name="RuneDecal" type="MeshInstance3D" parent="Wand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.031, 0)
+mesh = SubResource("PlaneMesh_decal")
+cast_shadow = 0
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 4)
@@ -115,3 +148,9 @@ shape = SubResource("CapsuleShape_player")
 
 [node name="Camera3D" type="Camera3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("4_hud")
+
+[node name="EnchantingUI" type="CanvasLayer" parent="."]
+script = ExtResource("5_ui")

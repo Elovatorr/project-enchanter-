@@ -20,7 +20,15 @@ than no guidance.
 | `project-enchanter.csproj` | Godot.NET.Sdk 4.7.2, net8.0. `tests\**` is excluded from this build. |
 | `main.tscn` | Drawing scene: root `Node2D` "Main" with `DrawingSurface` attached (run with F6). |
 | `scenes/room.tscn` | **Main scene**: first-person 3D room — floor, four walls, sun light, enchanting-table prism, and player. |
-| `scripts/PlayerController.cs` | `CharacterBody3D` first-person controller: WASD/Shift/Space + mouse look, Esc toggles capture. |
+| `scripts/PlayerController.cs` | `CharacterBody3D` first-person controller: WASD/Shift/Space + mouse look, Esc toggles capture, E raycasts interactions. |
+| `scripts/IInteractable.cs` | Interface for look-at interactions (`InteractionPrompt`, `Interact`). |
+| `scripts/Hud.cs` | Reticle, interaction prompt, and control hint (CanvasLayer). |
+| `scripts/EnchantingTable.cs` | Interactable table: opens the enchanting UI for the wand. |
+| `scripts/Wand.cs` | Interactable wand prism: close-up enchanting pose, element colour, etched rune decal, pick-up into the camera. |
+| `scripts/RuneTextureFactory.cs` | Rasterizes drawn strokes into a transparent texture for the wand's rune decal. |
+| `scripts/EnchantingUI.cs` | Full-screen overlay hosting the drawing scene; reports cast runes + strokes and closes. |
+| `scripts/RoomSelfTest.cs` | In-engine test for the room + enchanting flow (see "Testing in engine"). |
+| `tests/room_self_test.tscn` | Scene that runs `RoomSelfTest`. |
 | `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, Identify button, and per-rune flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
 | `scripts/DrawingSurfaceModel.cs` | Pure C# — drawing/undo logic. No Godot node dependencies; unit-testable. |
 | `scripts/RuneFeatures.cs` | Pure C# — drawing → feature vector (resample, smooth, PCA-canonicalize, structural stats). Must mirror the Python trainer; guarded by a parity test. |
@@ -88,6 +96,8 @@ Gotchas learned the hard way (do not regress these):
 - Absolute jitter on a small shape is disproportionately large: generate test jitter relative to the glyph size.
 - Features must be standardized before the MLP; unstandardized structural features dominate training.
 - Synthetic "scribbles" must be realistic (continuous wandering strokes, spirals, waves) — spiky random jumps are not representative and poison the unknown class.
+- **UI visibility**: use a plain `Control` (not a nested `CanvasLayer`) for the drawing surface's buttons/flash — a nested CanvasLayer does not hide with its parent, so its buttons stay active outside enchanting.
+- **Input layering**: full-screen overlay backgrounds must use `MouseFilter = Ignore`; `Stop` swallows mouse events before `_UnhandledInput`, which makes drawing impossible. Position UI with `SetAnchorsAndOffsetsPreset`. A `Control` whose parent is a `Node2D` gets **no** viewport-sized rect (`SetAnchorsPreset(FullRect)` alone leaves it 0×0, putting children at negative coordinates and breaking buttons) — give it an explicit `Size = GetViewportRect().Size` and update it on `Viewport.SizeChanged`.
 
 ## Testing in engine
 
@@ -106,12 +116,25 @@ It draws fire, water and density at various transforms (expect the right rune ca
 
 `scenes/room.tscn` is the main scene (a 20 × 14 room, walls 3 m high, floor at y = 0):
 
-- **Player** (`CharacterBody3D` + `PlayerController.cs`): spawns at (0, 0.1, 4); capsule 1.8 m, eye height 1.6 m. WASD move, Shift sprint, Space jump, mouse look, Esc toggles mouse capture. Physical key checks — no input-map actions required.
-- **EnchantingTable**: `StaticBody3D` with a box prism (`BoxMesh` 2.4 × 1 × 1.2) at (2, 0.5, −3), including a matching `BoxShape3D`.
+- **Player** (`CharacterBody3D` + `PlayerController.cs`): spawns at (0, 0.1, 4); capsule 1.8 m, eye height 1.6 m. WASD move, Shift sprint, Space jump, mouse look, Esc toggles mouse capture, **E interacts**. Physical key checks — no input-map actions required.
+- **Interaction**: `PlayerController` raycasts 3 m along the camera forward each physics frame; if the hit node implements `IInteractable`, its `InteractionPrompt` shows in the HUD and E calls `Interact`. Note group lookups (hud/player/wand) must be lazy — node `_Ready` order is not guaranteed.
+- **EnchantingTable**: `StaticBody3D` with a box prism (`BoxMesh` 2.4 × 1 × 1.2) at (2, 0.5, −3), including a matching `BoxShape3D`. Interacting shows the wand up close, opens `EnchantingUI` and pauses player controls.
+- **Wand**: small prism (0.06 × 0.06 × 0.55) on the table. While enchanting it is reparented to the camera at ~1.4× scale with its top face toward the viewer (`ShowCloseUp`), and restored afterwards (`EndCloseUp`). A cast call `Enchant(element, strokes)` tints it and rasterizes the strokes (`RuneTextureFactory`) onto the `RuneDecal` plane on its top face. Once enchanted, E picks it up and reparents it to the camera (`Held`).
+- **HUD** (`Hud.cs`): centre reticle (two bars), bottom interaction prompt, control hint.
+- **Enchanting overlay** (`EnchantingUI.cs`): lightly dimmed background (so the wand preview stays visible) + title/hint/Cancel, hosting `res://main.tscn`. `DrawingSurface` raises `CastCompleted(runes, strokes)`; the overlay closes and invokes `Open`'s callback with both. Cancel invokes the optional `onCancel` (used to restore the wand).
 - **Geometry**: floor plane (20 × 14) with a thin box collision; four wall boxes with collisions.
 - **Lighting**: one `DirectionalLight3D` with shadows; materials are plain `StandardMaterial3D` colours.
 
 Add new 3D content as nodes in this scene (or instanced sub-scenes), keeping collisions alongside meshes (`StaticBody3D` + `CollisionShape3D`). Verify by running the project and checking the log for errors; the player prints a "Player ready" line on startup.
+
+The room/enchanting flow has an automated in-engine test:
+
+```sh
+dotnet build
+# run res://tests/room_self_test.tscn (or via the godot MCP run_project)
+```
+
+It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera.
 
 ## Commands
 

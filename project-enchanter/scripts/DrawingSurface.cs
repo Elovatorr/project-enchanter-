@@ -10,6 +10,17 @@ namespace ProjectEnchanter;
 /// </summary>
 public partial class DrawingSurface : Node2D
 {
+    /// <summary>Emitted when identification produces at least one rune cast.
+    /// The argument is a comma-separated list of rune names.</summary>
+    [Signal]
+    public delegate void RunesCastEventHandler(string runes);
+
+    /// <summary>
+    /// C# event with the full detail of a cast: rune names and a snapshot of the
+    /// strokes that were drawn (used to etch the rune onto the wand).
+    /// </summary>
+    public event Action<string[], IReadOnlyList<IReadOnlyList<Vector2>>>? CastCompleted;
+
     private readonly DrawingSurfaceModel _model = new();
     private readonly RuneClassifier _classifier = new();
     private string? _lastCast;
@@ -17,6 +28,8 @@ public partial class DrawingSurface : Node2D
     private readonly List<Color> _flashHistory = [];
     private ColorRect? _flashRect;
     private Tween? _flashTween;
+    private Control? _uiLayer;
+    private Button? _identifyButton;
 
     [Export] public Color StrokeColor { get; set; } = Colors.White;
     [Export] public float StrokeWidth { get; set; } = 4.0f;
@@ -37,22 +50,39 @@ public partial class DrawingSurface : Node2D
     public int CastCount { get; private set; }
     public int FlashCount { get; private set; }
     public int CircleCount { get; private set; }
+
+    /// <summary>Number of strokes currently drawn (used by in-engine tests).</summary>
+    public int StrokeCount => _model.Strokes.Count;
+
+    /// <summary>Whether the drawing UI (buttons/flash) is actually visible.</summary>
+    public bool IsUiVisible => _uiLayer?.IsVisibleInTree() ?? false;
+
+    /// <summary>Global rect of the Identify button (used by in-engine tests).</summary>
+    public Rect2 IdentifyButtonRect => _identifyButton?.GetGlobalRect() ?? new Rect2();
     public Color LastFlashColor { get; private set; }
     public IReadOnlyList<Color> FlashHistory => _flashHistory;
 
     public override void _Ready()
     {
-        // Overlay layer for the "cast succeeded" flash and the Identify button.
-        CanvasLayer layer = new() { Layer = 100 };
-        AddChild(layer);
+        // UI (flash + buttons) lives in a plain Control so it inherits visibility
+        // from any parent CanvasLayer (e.g. the enchanting overlay). A nested
+        // CanvasLayer would NOT hide with its parent and its buttons would stay
+        // active outside enchanting.
+        _uiLayer = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        AddChild(_uiLayer);
+        // A Control under a Node2D does NOT inherit the viewport rect, so give it
+        // an explicit viewport-sized rect (and keep it in sync on resize).
+        _uiLayer.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _uiLayer.Size = GetViewportRect().Size;
+        GetViewport().SizeChanged += OnViewportResized;
 
         _flashRect = new ColorRect
         {
             Color = new Color(DefaultFlashColor.R, DefaultFlashColor.G, DefaultFlashColor.B, 0f),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _flashRect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        layer.AddChild(_flashRect);
+        _flashRect.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _uiLayer.AddChild(_flashRect);
 
         Button identifyButton = new()
         {
@@ -60,8 +90,9 @@ public partial class DrawingSurface : Node2D
             CustomMinimumSize = new Vector2(170, 44),
         };
         identifyButton.Pressed += Identify;
-        layer.AddChild(identifyButton);
+        _uiLayer.AddChild(identifyButton);
         AnchorBottomCenter(identifyButton, -95f, 95f);
+        _identifyButton = identifyButton;
 
         Button demoButton = new()
         {
@@ -69,8 +100,13 @@ public partial class DrawingSurface : Node2D
             CustomMinimumSize = new Vector2(220, 44),
         };
         demoButton.Pressed += DrawDemoRunes;
-        layer.AddChild(demoButton);
+        _uiLayer.AddChild(demoButton);
         AnchorBottomCenter(demoButton, -325f, -105f);
+    }
+
+    private void OnViewportResized()
+    {
+        if (_uiLayer is not null) _uiLayer.Size = GetViewportRect().Size;
     }
 
     /// <summary>Anchors a button to the bottom centre with the given x offsets.</summary>
@@ -133,6 +169,21 @@ public partial class DrawingSurface : Node2D
         }
     }
 
+    /// <summary>Clears all strokes and any pending result (used when closing the UI).</summary>
+    public void ClearDrawing()
+    {
+        _model.Clear();
+        _candidate = null;
+        QueueRedraw();
+    }
+
+    private static List<List<Vector2>> SnapshotStrokes(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
+    {
+        List<List<Vector2>> copy = [];
+        foreach (IReadOnlyList<Vector2> stroke in strokes) copy.Add([.. stroke]);
+        return copy;
+    }
+
     /// <summary>
     /// Classifies what is drawn. Runes enclosed in circles are identified
     /// individually (several at once); without circles the whole drawing is
@@ -156,6 +207,7 @@ public partial class DrawingSurface : Node2D
     private void CastEnclosedRunes(List<EnclosedRune> regions)
     {
         List<string> names = [];
+        List<string> runeNames = [];
         List<Color> flashColors = [];
         float bestConfidence = 0f;
 
@@ -167,6 +219,7 @@ public partial class DrawingSurface : Node2D
             RuneDiagnostics diagnostics = _classifier.RecognizeDetailed(region.Strokes);
             if (!diagnostics.Matched || diagnostics.Name is null) continue;
 
+            runeNames.Add(diagnostics.Name);
             names.Add($"{diagnostics.Name} ({diagnostics.Confidence:P0})");
             flashColors.Add(FlashColorFor(diagnostics.Name));
             bestConfidence = MathF.Max(bestConfidence, diagnostics.Confidence);
@@ -181,8 +234,12 @@ public partial class DrawingSurface : Node2D
 
         _lastCast = string.Join(", ", names);
         CastCount += names.Count;
+        IReadOnlyList<IReadOnlyList<Vector2>> strokes = SnapshotStrokes(
+            runeNames.Count > 0 ? regions[0].Strokes : []);
         _model.Clear();
         _candidate = null;
+        EmitSignal(SignalName.RunesCast, string.Join(",", runeNames));
+        CastCompleted?.Invoke([.. runeNames], strokes);
 
         if (bestConfidence > FlashThreshold)
         {
@@ -248,8 +305,11 @@ public partial class DrawingSurface : Node2D
         {
             _lastCast = $"{diagnostics.Name} ({diagnostics.Confidence:P0})";
             CastCount++;
+            IReadOnlyList<IReadOnlyList<Vector2>> strokes = SnapshotStrokes(_model.Strokes);
             _model.Clear();
             _candidate = null;
+            EmitSignal(SignalName.RunesCast, diagnostics.Name ?? "");
+            CastCompleted?.Invoke([diagnostics.Name ?? ""], strokes);
 
             // Flash the screen when the model is confident the rune was drawn.
             if (diagnostics.Confidence > FlashThreshold)

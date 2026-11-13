@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c2roomselftest"]
+
+[ext_resource type="Script" path="res://scripts/RoomSelfTest.cs" id="1_roomtest"]
+
+[node name="RoomSelfTestRoot" type="Node" unique_id=684302002]
+script = ExtResource("1_roomtest")
