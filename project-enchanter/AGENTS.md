@@ -26,6 +26,7 @@ than no guidance.
 | `scripts/RuneClassifier.cs` | Public classification API (`Recognize` / `RecognizeDetailed`) with the cast threshold. |
 | `scripts/RuneModelWeights.cs` | Loads the trained model from CSV embedded resources (see `resources/rune_model/`). |
 | `resources/rune_model/` | Trained weights as plain CSV (w1, b1, w2, b2, feature_mean/std, meta, parity). Embedded into the assembly; `.gdignore`d for Godot. |
+| `scripts/EnclosedRuneDetector.cs` | Pure C# — finds circle strokes and groups the runes drawn inside them (multi-rune drawings). |
 | `scripts/RuneTemplate.cs` | Pure C# record: a named rune and its reference strokes. |
 | `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test (currently `Fire`, a caret). |
 | `scripts/RecognitionSelfTest.cs` | In-engine automated test driver, run as a scene (see "Testing in engine"). |
@@ -60,8 +61,9 @@ weights compiled in). Pipeline:
 4. **Structural features** — eigenvalue ratio (thinness), path/RMS, corner fraction, sharpest turn.
 5. **Standardize + MLP** — z-score using trainer-provided mean/std, then 100 → 96 (ReLU) → classes (softmax).
 6. **Classify** — argmax over the non-"unknown" classes; cast when probability ≥ `RuneClassifier.MatchThreshold` (0.6). All-zero (degenerate) feature vectors are rejected outright.
-7. **Identification is manual** — strokes are not classified automatically. The player presses the on-screen **Identify rune** button, which calls `DrawingSurface.Identify()` → `TryCast()`.
-8. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DefaultFlashColor` fallback). All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
+7. **Multi-rune drawings** — if the drawing contains circles, `EnclosedRuneDetector.Find` identifies circle-like strokes (closed, round, full direction coverage, circumference-length path, radius range < 30%) and groups the non-circle strokes inside each (smallest enclosing circle wins; nested circles cast once). Each group is classified independently and all matches cast together. Flashes run in succession in **left-to-right** order (sorted by circle centre x), one colour per rune.
+8. **Identification is manual** — strokes are not classified automatically. The player presses the on-screen **Identify rune** button, which calls `DrawingSurface.Identify()`: circled runes are classified individually; with no circles, the whole drawing is classified as a single rune. A **Draw demo (fire + water)** button (`DrawDemoRunes()`) fills the canvas with a ready-made two-circled-rune test case.
+9. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DefaultFlashColor` fallback); multiple runes flash their colours in sequence. All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
 
 Runes: **fire** (one-stroke caret), **water** (two parallel waves). Current model: held-out accuracy ≈ 99.3%, fire recall ≈ 99.1%, water recall ≈ 99.4%.
 
@@ -96,7 +98,7 @@ dotnet build    # REQUIRED: Godot loads the prebuilt DLL; it does not compile
 # and read the log with get_debug_output / the app_userdata log file.
 ```
 
-It draws fire and water at various transforms (expect the right rune cast + its flash colour: red for fire, blue for water) and circle/line/wave (expect no cast and no flash). It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
+It draws fire and water at various transforms (expect the right rune cast + its flash colour: red for fire, blue for water), circle/line/wave (expect no cast and no flash), multi-rune cases (two circled runes → both cast, two sequential flashes; circled unknown shape → no cast; circled fire alone → fire), and the demo-button case. It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
 
 ## Commands
 
@@ -131,6 +133,7 @@ when something "doesn't work" at runtime.
 | Changed `RuneFeatures.cs` (feature math) | Mirror the change in `tools/train_rune_model.py`'s `extract_features`, retrain (this refreshes the parity sample), and re-run the invariance tests. The parity test will catch drift otherwise. |
 | Changed the model/training (shapes, augmentation, architecture, epochs) | Retrain, check held-out accuracy in the trainer output, and re-run `RuneClassifierTests`. Keep held-out accuracy ≳ 99% and fire recall ≳ 98%. |
 | Changed `RuneClassifier` threshold or API | Update the threshold-related tests and the HUD self-test expectations. |
+| Changed `EnclosedRuneDetector` (circle/enclosure geometry) | Update `EnclosedRuneDetectorTests` (circle fit, enclosure, nesting, multi-circle, invariance) and add a self-test case if the on-screen flow changes. |
 | Added a rune | See "Retraining and changing runes": trainer `FIRE`/shapes + `OUTPUT_NAMES` + `RuneTemplates.cs` + retrain + classifier tests for the new rune and rejection of the others. |
 | Renamed / deleted a class or method | Update all references in `tests/` in the same change — the build must stay green. |
 | Changed exported tunables (e.g. `MinPointDistance` default) | Update any test that relied on the default and any test names mentioning the value. |

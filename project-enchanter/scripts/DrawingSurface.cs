@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 namespace ProjectEnchanter;
@@ -13,9 +14,11 @@ public partial class DrawingSurface : Node2D
     private readonly RuneClassifier _classifier = new();
     private string? _lastCast;
     private string? _candidate;
+    private readonly List<Color> _flashHistory = [];
     private ColorRect? _flashRect;
     private Tween? _flashTween;
     private Button? _identifyButton;
+    private Button? _demoButton;
 
     [Export] public Color StrokeColor { get; set; } = Colors.White;
     [Export] public float StrokeWidth { get; set; } = 4.0f;
@@ -35,6 +38,7 @@ public partial class DrawingSurface : Node2D
     public int CastCount { get; private set; }
     public int FlashCount { get; private set; }
     public Color LastFlashColor { get; private set; }
+    public IReadOnlyList<Color> FlashHistory => _flashHistory;
     public bool IsFlashing => _flashTween is { } tween && tween.IsRunning();
 
     public override void _Ready()
@@ -58,17 +62,132 @@ public partial class DrawingSurface : Node2D
         };
         _identifyButton.Pressed += Identify;
         layer.AddChild(_identifyButton);
-        _identifyButton.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.CenterBottom);
-        _identifyButton.Position += new Vector2(-85f, -64f);
+        AnchorBottomCenter(_identifyButton, -95f, 95f);
+
+        _demoButton = new Button
+        {
+            Text = "Draw demo (fire + water)",
+            CustomMinimumSize = new Vector2(220, 44),
+        };
+        _demoButton.Pressed += DrawDemoRunes;
+        layer.AddChild(_demoButton);
+        AnchorBottomCenter(_demoButton, -325f, -105f);
+    }
+
+    /// <summary>Anchors a button to the bottom centre with the given x offsets.</summary>
+    private static void AnchorBottomCenter(Control control, float left, float right)
+    {
+        control.AnchorLeft = 0.5f;
+        control.AnchorRight = 0.5f;
+        control.AnchorTop = 1f;
+        control.AnchorBottom = 1f;
+        control.OffsetLeft = left;
+        control.OffsetRight = right;
+        control.OffsetTop = -64f;
+        control.OffsetBottom = -20f;
     }
 
     /// <summary>
-    /// Classifies everything currently drawn. Wire this to UI (the Identify
-    /// button calls it); it is not run automatically on stroke completion.
+    /// Fills the canvas with a ready-made two-rune test case: a circled fire
+    /// rune and a circled water rune, side by side.
+    /// </summary>
+    public void DrawDemoRunes()
+    {
+        _model.Clear();
+        _candidate = null;
+        _lastCast = null;
+
+        Rect2 view = GetViewportRect();
+        Vector2 center = view.Size / 2f;
+        float radius = MathF.Min(view.Size.X, view.Size.Y) * 0.15f;
+        float gap = radius * 2.8f;
+
+        AddCircledRune(RuneTemplates.Fire, center - new Vector2(gap / 2f, 0f), radius);
+        AddCircledRune(RuneTemplates.Water, center + new Vector2(gap / 2f, 0f), radius);
+
+        QueueRedraw();
+    }
+
+    private void AddCircledRune(RuneTemplate rune, Vector2 center, float radius)
+    {
+        // Circle enclosure.
+        const int circlePoints = 48;
+        _model.BeginStroke(center + new Vector2(radius, 0f));
+        for (int i = 1; i <= circlePoints; i++)
+        {
+            float angle = i * MathF.Tau / circlePoints;
+            _model.AppendPoint(center + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius);
+        }
+        _model.EndStroke();
+
+        // Rune inside, scaled to fit comfortably.
+        float scale = radius * 0.5f;
+        foreach (IReadOnlyList<Vector2> stroke in rune.Strokes)
+        {
+            _model.BeginStroke(stroke[0] * scale + center);
+            for (int i = 1; i < stroke.Count; i++)
+            {
+                _model.AppendPoint(stroke[i] * scale + center);
+            }
+            _model.EndStroke();
+        }
+    }
+
+    /// <summary>
+    /// Classifies what is drawn. Runes enclosed in circles are identified
+    /// individually (several at once); without circles the whole drawing is
+    /// classified as a single rune.
     /// </summary>
     public void Identify()
     {
-        TryCast();
+        List<EnclosedRune> regions = EnclosedRuneDetector.Find(_model.Strokes);
+        if (regions.Count > 0)
+        {
+            CastEnclosedRunes(regions);
+        }
+        else
+        {
+            TryCast();
+        }
+    }
+
+    /// <summary>Classifies each circled rune, casts the matches, flashes their colours.</summary>
+    private void CastEnclosedRunes(List<EnclosedRune> regions)
+    {
+        List<string> names = [];
+        List<Color> flashColors = [];
+        float bestConfidence = 0f;
+
+        // Left-to-right so multi-rune flashes read in a predictable order.
+        regions.Sort((a, b) => a.Center.X.CompareTo(b.Center.X));
+
+        foreach (EnclosedRune region in regions)
+        {
+            RuneDiagnostics diagnostics = _classifier.RecognizeDetailed(region.Strokes);
+            if (!diagnostics.Matched || diagnostics.Name is null) continue;
+
+            names.Add($"{diagnostics.Name} ({diagnostics.Confidence:P0})");
+            flashColors.Add(FlashColorFor(diagnostics.Name));
+            bestConfidence = MathF.Max(bestConfidence, diagnostics.Confidence);
+        }
+
+        if (names.Count == 0)
+        {
+            _candidate = $"no rune inside {regions.Count} circle(s)";
+            QueueRedraw();
+            return;
+        }
+
+        _lastCast = string.Join(", ", names);
+        CastCount += names.Count;
+        _model.Clear();
+        _candidate = null;
+
+        if (bestConfidence > FlashThreshold)
+        {
+            FlashScreen(flashColors);
+        }
+        QueueRedraw();
     }
     public int StrokeCount => _model.Strokes.Count;
     public int PointCount
@@ -144,7 +263,7 @@ public partial class DrawingSurface : Node2D
             // Flash the screen when the model is confident the rune was drawn.
             if (diagnostics.Confidence > FlashThreshold)
             {
-                FlashScreen(FlashColorFor(diagnostics.Name));
+                FlashScreen([FlashColorFor(diagnostics.Name)]);
             }
         }
         QueueRedraw();
@@ -158,20 +277,28 @@ public partial class DrawingSurface : Node2D
         _ => DefaultFlashColor,
     };
 
-    /// <summary>Flashes the full-screen overlay for <see cref="FlashDuration"/> seconds.</summary>
-    private void FlashScreen(Color color)
+    /// <summary>
+    /// Flashes the full-screen overlay once per colour (so multiple runes each
+    /// get their own flash), each for <see cref="FlashDuration"/> seconds.
+    /// </summary>
+    private void FlashScreen(IReadOnlyList<Color> colors)
     {
-        if (_flashRect is null) return;
+        if (_flashRect is null || colors.Count == 0) return;
 
         _flashTween?.Kill();
-        _flashRect.Color = color;
-        LastFlashColor = color;
-        FlashCount++;
+        FlashCount += colors.Count;
+        LastFlashColor = colors[^1];
+        _flashHistory.AddRange(colors);
 
         _flashTween = CreateTween();
-        _flashTween.TweenProperty(_flashRect, "color:a", 0f, FlashDuration)
-            .SetTrans(Tween.TransitionType.Quad)
-            .SetEase(Tween.EaseType.Out);
+        foreach (Color color in colors)
+        {
+            Color flash = color;
+            _flashTween.TweenCallback(Callable.From(() => _flashRect.Color = flash));
+            _flashTween.TweenProperty(_flashRect, "color:a", 0f, FlashDuration)
+                .SetTrans(Tween.TransitionType.Quad)
+                .SetEase(Tween.EaseType.Out);
+        }
     }
 
     public override void _Draw()

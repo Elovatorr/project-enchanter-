@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace ProjectEnchanter;
@@ -67,9 +68,50 @@ public partial class RecognitionSelfTest : Node
         await DrawStrokes("straight-line", [new List<Vector2> { new(100, 100), new(500, 500) }], null);
         await DrawStrokes("horizontal-wave", WaveStrokes(), null);
 
+        // Multiple runes, each enclosed in a circle.
+        await DrawMultiRune("two-circled-runes", TwoCircledRunes(), ["fire", "water"]);
+        await DrawMultiRune("circled-unknown-shape", CircledUnknown(), []);
+        await DrawMultiRune("circled-fire-only", CircledFireOnly(), ["fire"]);
+
+        // The "Draw demo" button's ready-made two-rune case.
+        await DemoRunesCase();
+
         GD.Print($"SELFTEST SUMMARY: passed={_passed} failed={_failed}");
         await WaitFrames(2);
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    private static List<List<Vector2>> TwoCircledRunes()
+    {
+        List<List<Vector2>> strokes = [CircleStroke(new Vector2(300, 300), 140f)];
+        strokes.Add(TransformStroke(RuneTemplates.Fire.Strokes[0], 0f, 55f, new Vector2(300, 300)));
+
+        strokes.Add(CircleStroke(new Vector2(800, 300), 140f));
+        foreach (IReadOnlyList<Vector2> wave in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(TransformStroke(wave, 0f, 55f, new Vector2(800, 300)));
+        }
+        return strokes;
+    }
+
+    private static List<List<Vector2>> CircledUnknown()
+    {
+        List<Vector2> wave = [];
+        for (int i = 0; i <= 30; i++)
+        {
+            float x = i / 30f * 2f - 1f;
+            wave.Add(new Vector2(x * 60f + 400f, 300f + MathF.Sin(x * MathF.Tau) * 15f));
+        }
+        return [CircleStroke(new Vector2(400, 300), 140f), wave];
+    }
+
+    private static List<List<Vector2>> CircledFireOnly()
+    {
+        return
+        [
+            CircleStroke(new Vector2(500, 350), 150f),
+            TransformStroke(RuneTemplates.Fire.Strokes[0], 0f, 60f, new Vector2(500, 350)),
+        ];
     }
 
     // ---- Drawing helpers (through the real input pipeline) ----
@@ -86,9 +128,21 @@ public partial class RecognitionSelfTest : Node
 
     private async Task DrawStrokes(string name, List<List<Vector2>> strokes, string? expectedRune)
     {
+        await DrawRaw(name, strokes, expectedRune is null ? [] : [expectedRune]);
+    }
+
+    /// <summary>Draws and identifies, expecting zero or more cast runes.</summary>
+    private async Task DrawMultiRune(string name, List<List<Vector2>> strokes, string[] expectedRunes)
+    {
+        await DrawRaw(name, strokes, expectedRunes);
+    }
+
+    private async Task DrawRaw(string name, List<List<Vector2>> strokes, string[] expectedRunes)
+    {
         await ClearCanvas();
         int previousCasts = _surface.CastCount;
         int previousFlashes = _surface.FlashCount;
+        int previousFlashHistory = _surface.FlashHistory.Count;
 
         foreach (List<Vector2> stroke in strokes)
         {
@@ -112,32 +166,76 @@ public partial class RecognitionSelfTest : Node
         string cast = _surface.LastCast ?? "";
         bool casted = _surface.CastCount > previousCasts;
         bool flashed = _surface.FlashCount > previousFlashes;
-        bool ok = casted == (expectedRune is not null)
-                  && flashed == (expectedRune is not null);
+        bool expectCast = expectedRunes.Length > 0;
 
-        if (expectedRune is not null)
+        bool ok = casted == expectCast && flashed == expectCast;
+        foreach (string rune in expectedRunes)
         {
-            bool rightRune = cast.StartsWith(expectedRune, StringComparison.OrdinalIgnoreCase);
-            Color expectedColor = expectedRune == "water" ? _surface.WaterFlashColor : _surface.FireFlashColor;
-            bool rightColor = _surface.LastFlashColor.IsEqualApprox(expectedColor);
-            ok = ok && rightRune && rightColor;
+            ok = ok && cast.Contains(rune, StringComparison.OrdinalIgnoreCase);
+        }
+        if (expectCast)
+        {
+            ok = ok && _surface.FlashCount - previousFlashes == expectedRunes.Length;
+
+            // Each rune flashes in detection order: verify the whole sequence.
+            List<Color> expectedColors = expectedRunes
+                .Select(rune => rune == "water" ? _surface.WaterFlashColor : _surface.FireFlashColor)
+                .ToList();
+            List<Color> actualColors = _surface.FlashHistory.Skip(previousFlashHistory).ToList();
+            ok = ok && actualColors.Count == expectedColors.Count
+                    && actualColors.Zip(expectedColors).All(pair => pair.First.IsEqualApprox(pair.Second));
         }
 
         if (ok) _passed++; else _failed++;
-        GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [{name}] casted={casted} flashed={flashed} " +
-                 $"color={_surface.LastFlashColor.ToHtml()} lastCast='{cast}' candidate='{_surface.Candidate}'");
+        GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [{name}] casted={casted} flashes={_surface.FlashCount - previousFlashes} " +
+                 $"colors=[{string.Join(", ", _surface.FlashHistory.Skip(previousFlashHistory).Select(c => c.ToHtml()))}] " +
+                 $"lastCast='{cast}' candidate='{_surface.Candidate}'");
+    }
+
+    private async Task DemoRunesCase()
+    {
+        await ClearCanvas();
+        int previousCasts = _surface.CastCount;
+        int previousFlashes = _surface.FlashCount;
+
+        _surface.DrawDemoRunes();
+        await WaitFrames(2);
+        _surface.Identify();
+        await WaitFrames(3);
+
+        string cast = _surface.LastCast ?? "";
+        bool ok = _surface.CastCount - previousCasts == 2
+                  && _surface.FlashCount - previousFlashes == 2
+                  && cast.Contains("fire", StringComparison.OrdinalIgnoreCase)
+                  && cast.Contains("water", StringComparison.OrdinalIgnoreCase);
+
+        if (ok) _passed++; else _failed++;
+        GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [demo-runes] casted={_surface.CastCount - previousCasts} " +
+                 $"flashes={_surface.FlashCount - previousFlashes} lastCast='{cast}'");
     }
 
     private async Task ClearCanvas()
     {
-        // Right-clicks undo strokes one at a time; enough presses for any test case.
-        for (int i = 0; i < 3; i++)
+        // Right-clicks undo strokes one at a time; enough presses for the
+        // largest multi-rune case.
+        for (int i = 0; i < 8; i++)
         {
             SendMouseButton(new Vector2(10, 10), true, MouseButton.Right);
             SendMouseButton(new Vector2(10, 10), false, MouseButton.Right);
             await WaitFrames(1);
         }
         await WaitFrames(1);
+    }
+
+    private static List<Vector2> CircleStroke(Vector2 center, float radius, int points = 48)
+    {
+        List<Vector2> circle = [];
+        for (int i = 0; i <= points; i++)
+        {
+            float angle = i * MathF.Tau / points;
+            circle.Add(center + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius);
+        }
+        return circle;
     }
 
     private void SendMouseButton(Vector2 position, bool pressed, MouseButton button = MouseButton.Left)
