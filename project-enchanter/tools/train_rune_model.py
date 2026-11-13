@@ -10,12 +10,13 @@ Usage:
 Outputs:
     scripts/RuneModelWeights.g.cs  (committed; the game compiles it in)
 
-Feature vector (72 dims), invariant to position, scale and rotation:
+Feature vector (100 dims), invariant to position, scale and rotation:
     - combine all strokes, resample to 48 points (arc-length proportional)
     - smooth (2 moving-average passes)
-    - normalize: centroid at origin, RMS radius = 1
-    - split into 36 angular sectors; per sector:
-        mean radius of its points (0 if empty), occupancy fraction
+    - normalize: centroid at origin, RMS radius = 1, rotate onto the PCA axis
+      (axis sign resolved by radius-weighted x skew); emit two mirror variants
+    - append 4 structural features: eigenvalue ratio (thinness),
+      path length / RMS, corner fraction, sharpest turn / pi
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ import random
 import numpy as np
 
 TOTAL_POINTS = 48
-SECTORS = 36  # unused by the feature extractor; kept for reference
 INPUT_SIZE = TOTAL_POINTS * 2 + 4
 HIDDEN_SIZE = 96
 OUTPUT_NAMES = ["unknown", "fire", "water"]
@@ -458,10 +458,6 @@ def train():
             print(f"  {name:6s}: {int(wrong.sum())}/{int(mask.sum())} wrong ({detail})")
 
     return w1, b1, w2, b2, accuracy(xte, yte), mean, std
-
-
-def fmt(value: float) -> str:
-    return f"{value:.8g}f"
 
 
 def export_weights(w1, b1, w2, b2, accuracy, mean, std):

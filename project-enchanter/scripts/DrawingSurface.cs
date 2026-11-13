@@ -17,8 +17,6 @@ public partial class DrawingSurface : Node2D
     private readonly List<Color> _flashHistory = [];
     private ColorRect? _flashRect;
     private Tween? _flashTween;
-    private Button? _identifyButton;
-    private Button? _demoButton;
 
     [Export] public Color StrokeColor { get; set; } = Colors.White;
     [Export] public float StrokeWidth { get; set; } = 4.0f;
@@ -39,7 +37,6 @@ public partial class DrawingSurface : Node2D
     public int FlashCount { get; private set; }
     public Color LastFlashColor { get; private set; }
     public IReadOnlyList<Color> FlashHistory => _flashHistory;
-    public bool IsFlashing => _flashTween is { } tween && tween.IsRunning();
 
     public override void _Ready()
     {
@@ -55,23 +52,23 @@ public partial class DrawingSurface : Node2D
         _flashRect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_flashRect);
 
-        _identifyButton = new Button
+        Button identifyButton = new()
         {
             Text = "Identify rune",
             CustomMinimumSize = new Vector2(170, 44),
         };
-        _identifyButton.Pressed += Identify;
-        layer.AddChild(_identifyButton);
-        AnchorBottomCenter(_identifyButton, -95f, 95f);
+        identifyButton.Pressed += Identify;
+        layer.AddChild(identifyButton);
+        AnchorBottomCenter(identifyButton, -95f, 95f);
 
-        _demoButton = new Button
+        Button demoButton = new()
         {
             Text = "Draw demo (fire + water)",
             CustomMinimumSize = new Vector2(220, 44),
         };
-        _demoButton.Pressed += DrawDemoRunes;
-        layer.AddChild(_demoButton);
-        AnchorBottomCenter(_demoButton, -325f, -105f);
+        demoButton.Pressed += DrawDemoRunes;
+        layer.AddChild(demoButton);
+        AnchorBottomCenter(demoButton, -325f, -105f);
     }
 
     /// <summary>Anchors a button to the bottom centre with the given x offsets.</summary>
@@ -188,16 +185,6 @@ public partial class DrawingSurface : Node2D
             FlashScreen(flashColors);
         }
         QueueRedraw();
-    }
-    public int StrokeCount => _model.Strokes.Count;
-    public int PointCount
-    {
-        get
-        {
-            int n = 0;
-            foreach (IReadOnlyList<Vector2> stroke in _model.Strokes) n += stroke.Count;
-            return n;
-        }
     }
 
     public override void _UnhandledInput(InputEvent @event)

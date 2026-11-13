@@ -46,9 +46,6 @@ public class RuneClassifier
         _runeIndices = [.. indices];
     }
 
-    /// <summary>True when the model knows at least one rune.</summary>
-    public bool HasRunes => _runeNames.Length > 0;
-
     /// <summary>
     /// Classifies the strokes. Returns the most likely rune if its probability
     /// is at or above the threshold, or null.
