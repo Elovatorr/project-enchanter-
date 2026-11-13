@@ -18,7 +18,9 @@ than no guidance.
 |---|---|
 | `project.godot` | Godot project config. `[dotnet] project/assembly_name` **must match** the csproj file name (`project-enchanter`, no spaces) or C# scripts fail to instantiate at runtime. |
 | `project-enchanter.csproj` | Godot.NET.Sdk 4.7.2, net8.0. `tests\**` is excluded from this build. |
-| `main.tscn` | Main (only) scene. Root `Node2D` "Main" with `DrawingSurface` attached. |
+| `main.tscn` | Drawing scene: root `Node2D` "Main" with `DrawingSurface` attached (run with F6). |
+| `scenes/room.tscn` | **Main scene**: first-person 3D room — floor, four walls, sun light, enchanting-table prism, and player. |
+| `scripts/PlayerController.cs` | `CharacterBody3D` first-person controller: WASD/Shift/Space + mouse look, Esc toggles capture. |
 | `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, Identify button, and per-rune flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
 | `scripts/DrawingSurfaceModel.cs` | Pure C# — drawing/undo logic. No Godot node dependencies; unit-testable. |
 | `scripts/RuneFeatures.cs` | Pure C# — drawing → feature vector (resample, smooth, PCA-canonicalize, structural stats). Must mirror the Python trainer; guarded by a parity test. |
@@ -99,6 +101,17 @@ dotnet build    # REQUIRED: Godot loads the prebuilt DLL; it does not compile
 ```
 
 It draws fire, water and density at various transforms (expect the right rune cast + its flash colour: red / blue / green), circle/line/wave (expect no cast and no flash), multi-rune cases (two circled runes → both cast; three circled runes → all three in left-to-right order; **imperfect hand-drawn circles** with gap/ovalness/wobble; circled unknown shape → no cast; circled fire alone → fire), and the three-rune demo-button case. It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
+
+## 3D room scene
+
+`scenes/room.tscn` is the main scene (a 20 × 14 room, walls 3 m high, floor at y = 0):
+
+- **Player** (`CharacterBody3D` + `PlayerController.cs`): spawns at (0, 0.1, 4); capsule 1.8 m, eye height 1.6 m. WASD move, Shift sprint, Space jump, mouse look, Esc toggles mouse capture. Physical key checks — no input-map actions required.
+- **EnchantingTable**: `StaticBody3D` with a box prism (`BoxMesh` 2.4 × 1 × 1.2) at (2, 0.5, −3), including a matching `BoxShape3D`.
+- **Geometry**: floor plane (20 × 14) with a thin box collision; four wall boxes with collisions.
+- **Lighting**: one `DirectionalLight3D` with shadows; materials are plain `StandardMaterial3D` colours.
+
+Add new 3D content as nodes in this scene (or instanced sub-scenes), keeping collisions alongside meshes (`StaticBody3D` + `CollisionShape3D`). Verify by running the project and checking the log for errors; the player prints a "Player ready" line on startup.
 
 ## Commands
 
