@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cxp5ib8lhuy01"]
+
+[ext_resource type="Script" path="res://scripts/DrawingSurface.cs" id="1_draw"]
+
+[node name="Main" type="Node2D" unique_id=684301957]
+script = ExtResource("1_draw")
