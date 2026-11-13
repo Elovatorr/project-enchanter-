@@ -10,5 +10,7 @@
     <ItemGroup>
         <!-- Tests live in their own project; don't compile them here. -->
         <Compile Remove="tests\**" />
+        <!-- Trained model parameters (written by tools/train_rune_model.py). -->
+        <EmbeddedResource Include="resources\rune_model\*.csv" />
     </ItemGroup>
 </Project>

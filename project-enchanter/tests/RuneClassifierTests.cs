@@ -159,6 +159,66 @@ public class RuneClassifierTests
         Assert.Null(NewClassifier().Recognize([new List<Vector2> { new(100, 100), new(500, 500) }]));
     }
 
+    // ---- Water rune ----
+
+    [Fact]
+    public void Recognize_WaterTemplate_CastsWater()
+    {
+        RuneMatch? match = NewClassifier().Recognize(RuneTemplates.Water.Strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("water", match!.Name);
+        Assert.InRange(match.Confidence, RuneClassifier.MatchThreshold, 1f);
+    }
+
+    [Fact]
+    public void Recognize_WaterTranslatedAndScaled_CastsWater()
+    {
+        var strokes = Transform(RuneTemplates.Water.Strokes, scale: 240f, offset: new Vector2(500, 250));
+
+        RuneMatch? match = NewClassifier().Recognize(strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("water", match!.Name);
+    }
+
+    [Theory]
+    [InlineData(30f)]
+    [InlineData(180f)]
+    [InlineData(320f)]
+    public void Recognize_WaterRotated_CastsWater(float degrees)
+    {
+        var strokes = Transform(RuneTemplates.Water.Strokes, degrees * MathF.PI / 180f, 200f, new Vector2(400, 300));
+
+        RuneMatch? match = NewClassifier().Recognize(strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("water", match!.Name);
+    }
+
+    [Fact]
+    public void Recognize_Fire_IsNotClassifiedAsWater()
+    {
+        RuneMatch? match = NewClassifier().Recognize(RuneTemplates.Fire.Strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("fire", match!.Name);
+    }
+
+    [Fact]
+    public void Recognize_SingleWave_DoesNotCastWater()
+    {
+        // Water has two waves; a single wavy line is not the rune.
+        List<Vector2> wave = [];
+        for (int i = 0; i <= 30; i++)
+        {
+            float x = i / 30f * 2f - 1f;
+            wave.Add(new Vector2(x * 200f + 400f, 300f + MathF.Sin(x * MathF.Tau) * 40f));
+        }
+
+        Assert.Null(NewClassifier().Recognize([wave]));
+    }
+
     // ---- Diagnostics (HUD) ----
 
     [Fact]

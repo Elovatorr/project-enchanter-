@@ -19,12 +19,13 @@ than no guidance.
 | `project.godot` | Godot project config. `[dotnet] project/assembly_name` **must match** the csproj file name (`project-enchanter`, no spaces) or C# scripts fail to instantiate at runtime. |
 | `project-enchanter.csproj` | Godot.NET.Sdk 4.7.2, net8.0. `tests\**` is excluded from this build. |
 | `main.tscn` | Main (only) scene. Root `Node2D` "Main" with `DrawingSurface` attached. |
-| `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, and the red "cast" flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
+| `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, Identify button, and per-rune flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
 | `scripts/DrawingSurfaceModel.cs` | Pure C# — drawing/undo logic. No Godot node dependencies; unit-testable. |
 | `scripts/RuneFeatures.cs` | Pure C# — drawing → feature vector (resample, smooth, PCA-canonicalize, structural stats). Must mirror the Python trainer; guarded by a parity test. |
 | `scripts/RuneModel.cs` | Pure C# — MLP forward pass + feature standardization. |
 | `scripts/RuneClassifier.cs` | Public classification API (`Recognize` / `RecognizeDetailed`) with the cast threshold. |
-| `scripts/RuneModelWeights.g.cs` | **Generated** by `tools/train_rune_model.py` — do not edit by hand. |
+| `scripts/RuneModelWeights.cs` | Loads the trained model from CSV embedded resources (see `resources/rune_model/`). |
+| `resources/rune_model/` | Trained weights as plain CSV (w1, b1, w2, b2, feature_mean/std, meta, parity). Embedded into the assembly; `.gdignore`d for Godot. |
 | `scripts/RuneTemplate.cs` | Pure C# record: a named rune and its reference strokes. |
 | `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test (currently `Fire`, a caret). |
 | `scripts/RecognitionSelfTest.cs` | In-engine automated test driver, run as a scene (see "Testing in engine"). |
@@ -33,7 +34,7 @@ than no guidance.
 | `tests/RuneFeaturesTests.cs` | Feature pipeline tests incl. invariance + Python-trainer parity. |
 | `tests/RuneClassifierTests.cs` | Classifier tests: invariance, hand-drawn tolerance, rejection. |
 | `tests/recognition_self_test.tscn` | Scene that runs `RecognitionSelfTest` in-engine. |
-| `tools/train_rune_model.py` | Trains the MLP (numpy) and regenerates `RuneModelWeights.g.cs`. |
+| `tools/train_rune_model.py` | Trains the MLP (numpy) and writes `resources/rune_model/*.csv`. |
 
 ## Design principle: keep logic out of the node
 
@@ -59,21 +60,22 @@ weights compiled in). Pipeline:
 4. **Structural features** — eigenvalue ratio (thinness), path/RMS, corner fraction, sharpest turn.
 5. **Standardize + MLP** — z-score using trainer-provided mean/std, then 100 → 96 (ReLU) → classes (softmax).
 6. **Classify** — argmax over the non-"unknown" classes; cast when probability ≥ `RuneClassifier.MatchThreshold` (0.6). All-zero (degenerate) feature vectors are rejected outright.
-7. **Feedback** — on a cast, the node flashes a full-screen red overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7); both are `[Export]` tunables on `DrawingSurface`.
+7. **Identification is manual** — strokes are not classified automatically. The player presses the on-screen **Identify rune** button, which calls `DrawingSurface.Identify()` → `TryCast()`.
+8. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DefaultFlashColor` fallback). All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
 
-Current model (caret fire rune): held-out accuracy ≈ 99.6%, fire recall ≈ 99.7%.
+Runes: **fire** (one-stroke caret), **water** (two parallel waves). Current model: held-out accuracy ≈ 99.3%, fire recall ≈ 99.1%, water recall ≈ 99.4%.
 
 ### Retraining and changing runes
 
 ```sh
 pip install numpy
-python tools/train_rune_model.py     # regenerates scripts/RuneModelWeights.g.cs
+python tools/train_rune_model.py     # rewrites resources/rune_model/*.csv
 ```
 
+- Model parameters live in `resources/rune_model/` as **plain CSV** (`w1.csv` 96×100, `b1.csv`, `w2.csv`, `b2.csv`, `feature_mean.csv`, `feature_std.csv`, `meta.csv`, plus parity files). They are compiled in as embedded resources by the csproj, so the game and tests read them without file IO. Edit them by hand and rebuild if needed — but keep dimensions consistent with `meta.csv` (the loader validates shapes and fails loudly).
 - Training data is synthesized in the script: the rune template(s) from `RuneTemplates.cs` (mirrored manually in Python as `FIRE`) plus augmentation (rotation, scale, translation, jitter, densification) and an "unknown" class of scribbles/letters/shapes.
-- **When adding a rune**: add its points to `tools/train_rune_model.py` (training shapes) *and* `scripts/RuneTemplates.cs` (self-test/UI reference), add it to `OUTPUT_NAMES`, retrain, then add classifier tests for it.
-- **Do not hand-edit `RuneModelWeights.g.cs`** — it is generated.
-- **Parity guard**: the trainer embeds a reference feature vector (`ParityFeatures`) computed for the fire template; `RuneFeaturesTests.Extract_MatchesPythonTrainerParitySample` fails if the C# feature code drifts. If you change `RuneFeatures.cs`, change `extract_features` in the trainer identically and retrain.
+- **When adding a rune**: add its points to `tools/train_rune_model.py` (add to `RUNES` and `OUTPUT_NAMES`), mirror it in `scripts/RuneTemplates.cs`, add a flash colour in `DrawingSurface.FlashColorFor()`, retrain, then add classifier tests (classifies at transforms, isn't confused with existing runes, and near-misses are rejected).
+- **Parity guard**: the trainer embeds a reference feature vector (`parity_features.csv`) computed for the fire template; `RuneFeaturesTests.Extract_MatchesPythonTrainerParitySample` fails if the C# feature code drifts. If you change `RuneFeatures.cs`, change `extract_features` in the trainer identically and retrain.
 
 Gotchas learned the hard way (do not regress these):
 
@@ -94,7 +96,7 @@ dotnet build    # REQUIRED: Godot loads the prebuilt DLL; it does not compile
 # and read the log with get_debug_output / the app_userdata log file.
 ```
 
-It covers fire at various transforms (expect cast **and** red flash) and circle/line/wave (expect no cast and no flash). **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
+It draws fire and water at various transforms (expect the right rune cast + its flash colour: red for fire, blue for water) and circle/line/wave (expect no cast and no flash). It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
 
 ## Commands
 
@@ -105,7 +107,7 @@ dotnet build
 # Run the tests
 dotnet test tests\project-enchanter.tests.csproj
 
-# Retrain the rune classifier (regenerates scripts/RuneModelWeights.g.cs)
+# Retrain the rune classifier (rewrites resources/rune_model/*.csv)
 python tools/train_rune_model.py
 
 # Run the game: press F5 inside the Godot editor (Rider alone will not launch it)

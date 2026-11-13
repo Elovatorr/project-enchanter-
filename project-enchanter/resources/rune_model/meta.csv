@@ -1,0 +1,7 @@
+key,value
+input_size,100
+hidden_size,96
+output_size,3
+output_names,unknown;fire;water
+parity_stroke_lengths,9
+trained_accuracy,0.992778

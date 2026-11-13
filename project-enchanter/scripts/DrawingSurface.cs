@@ -15,12 +15,15 @@ public partial class DrawingSurface : Node2D
     private string? _candidate;
     private ColorRect? _flashRect;
     private Tween? _flashTween;
+    private Button? _identifyButton;
 
     [Export] public Color StrokeColor { get; set; } = Colors.White;
     [Export] public float StrokeWidth { get; set; } = 4.0f;
     [Export] public float FlashThreshold { get; set; } = 0.7f;
     [Export] public float FlashDuration { get; set; } = 0.5f;
-    [Export] public Color FlashColor { get; set; } = new(1f, 0.1f, 0.05f, 0.55f);
+    [Export] public Color FireFlashColor { get; set; } = new(1f, 0.1f, 0.05f, 0.55f);
+    [Export] public Color WaterFlashColor { get; set; } = new(0.1f, 0.35f, 1f, 0.55f);
+    [Export] public Color DefaultFlashColor { get; set; } = new(1f, 0.6f, 0.1f, 0.55f);
     [Export] public float MinPointDistance
     {
         get => _model.MinPointDistance;
@@ -31,21 +34,41 @@ public partial class DrawingSurface : Node2D
     public string? Candidate => _candidate;
     public int CastCount { get; private set; }
     public int FlashCount { get; private set; }
+    public Color LastFlashColor { get; private set; }
     public bool IsFlashing => _flashTween is { } tween && tween.IsRunning();
 
     public override void _Ready()
     {
-        // Full-screen overlay used for the "cast succeeded" flash. Lives on its
-        // own CanvasLayer so it covers the canvas regardless of camera/zoom.
+        // Overlay layer for the "cast succeeded" flash and the Identify button.
         CanvasLayer layer = new() { Layer = 100 };
         AddChild(layer);
+
         _flashRect = new ColorRect
         {
-            Color = new Color(FlashColor.R, FlashColor.G, FlashColor.B, 0f),
+            Color = new Color(DefaultFlashColor.R, DefaultFlashColor.G, DefaultFlashColor.B, 0f),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _flashRect.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_flashRect);
+
+        _identifyButton = new Button
+        {
+            Text = "Identify rune",
+            CustomMinimumSize = new Vector2(170, 44),
+        };
+        _identifyButton.Pressed += Identify;
+        layer.AddChild(_identifyButton);
+        _identifyButton.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.CenterBottom);
+        _identifyButton.Position += new Vector2(-85f, -64f);
+    }
+
+    /// <summary>
+    /// Classifies everything currently drawn. Wire this to UI (the Identify
+    /// button calls it); it is not run automatically on stroke completion.
+    /// </summary>
+    public void Identify()
+    {
+        TryCast();
     }
     public int StrokeCount => _model.Strokes.Count;
     public int PointCount
@@ -69,12 +92,16 @@ public partial class DrawingSurface : Node2D
 
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } when _model.IsDrawing:
                 _model.EndStroke();
-                TryCast();
+                QueueRedraw();
                 break;
 
             // Right-click removes the most recent stroke (undo, one stroke at a time).
             case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }:
-                if (_model.UndoLastStroke()) TryCast();
+                if (_model.UndoLastStroke())
+                {
+                    _candidate = null;
+                    QueueRedraw();
+                }
                 break;
 
             case InputEventMouseMotion motion when _model.IsDrawing:
@@ -117,19 +144,28 @@ public partial class DrawingSurface : Node2D
             // Flash the screen when the model is confident the rune was drawn.
             if (diagnostics.Confidence > FlashThreshold)
             {
-                FlashScreen();
+                FlashScreen(FlashColorFor(diagnostics.Name));
             }
         }
         QueueRedraw();
     }
 
+    /// <summary>Per-rune flash colour: fire red, water blue, fallback orange.</summary>
+    private Color FlashColorFor(string? runeName) => runeName switch
+    {
+        "fire" => FireFlashColor,
+        "water" => WaterFlashColor,
+        _ => DefaultFlashColor,
+    };
+
     /// <summary>Flashes the full-screen overlay for <see cref="FlashDuration"/> seconds.</summary>
-    private void FlashScreen()
+    private void FlashScreen(Color color)
     {
         if (_flashRect is null) return;
 
         _flashTween?.Kill();
-        _flashRect.Color = FlashColor;
+        _flashRect.Color = color;
+        LastFlashColor = color;
         FlashCount++;
 
         _flashTween = CreateTween();
@@ -145,7 +181,7 @@ public partial class DrawingSurface : Node2D
         DrawString(font, new Vector2(16, 30),
             $"Drawing: {_model.Strokes.Count} stroke(s)", HorizontalAlignment.Left, -1, 22, Colors.LightGray);
         DrawString(font, new Vector2(16, 58),
-            $"Best match: {_candidate ?? "—"}", HorizontalAlignment.Left, -1, 22,
+            $"Best match: {_candidate ?? "press Identify"}", HorizontalAlignment.Left, -1, 22,
             _candidate is not null && _candidate.Contains("cast!") ? Colors.Gold : Colors.White);
         if (_lastCast is not null)
         {

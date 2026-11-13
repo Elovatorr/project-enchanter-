@@ -42,17 +42,30 @@ public partial class RecognitionSelfTest : Node
     {
         await WaitFrames(15); // let the surface initialize
 
-        // Positives: the caret fire rune through various transforms.
-        await DrawRune("identity", s => TransformStroke(s, 0f, 200f, new Vector2(450, 300)), true);
-        await DrawRune("translated+small", s => TransformStroke(s, 15f, 110f, new Vector2(200, 200)), true);
-        await DrawRune("rotated-minus-35", s => TransformStroke(s, -35f, 260f, new Vector2(600, 350)), true);
-        await DrawRune("rotated-90", s => TransformStroke(s, 90f, 180f, new Vector2(400, 300)), true);
-        await DrawRune("scaled-down", s => TransformStroke(s, 0f, 60f, new Vector2(150, 150)), true);
+        // Fire (caret) through various transforms: expect cast + red flash.
+        await DrawRune("fire-identity", RuneTemplates.Fire,
+            s => TransformStroke(s, 0f, 200f, new Vector2(450, 300)), "fire");
+        await DrawRune("fire-translated+small", RuneTemplates.Fire,
+            s => TransformStroke(s, 15f, 110f, new Vector2(200, 200)), "fire");
+        await DrawRune("fire-rotated-minus-35", RuneTemplates.Fire,
+            s => TransformStroke(s, -35f, 260f, new Vector2(600, 350)), "fire");
+        await DrawRune("fire-rotated-90", RuneTemplates.Fire,
+            s => TransformStroke(s, 90f, 180f, new Vector2(400, 300)), "fire");
+        await DrawRune("fire-scaled-down", RuneTemplates.Fire,
+            s => TransformStroke(s, 0f, 60f, new Vector2(150, 150)), "fire");
 
-        // Negatives: shapes that must never cast fire.
-        await DrawStrokes("circle", CircleStrokes(), false);
-        await DrawStrokes("straight-line", [new List<Vector2> { new(100, 100), new(500, 500) }], false);
-        await DrawStrokes("horizontal-wave", WaveStrokes(), false);
+        // Water (two waves): expect cast + blue flash.
+        await DrawRune("water-identity", RuneTemplates.Water,
+            s => TransformStroke(s, 0f, 200f, new Vector2(450, 300)), "water");
+        await DrawRune("water-rotated-25", RuneTemplates.Water,
+            s => TransformStroke(s, 25f, 220f, new Vector2(500, 350)), "water");
+        await DrawRune("water-scaled-down", RuneTemplates.Water,
+            s => TransformStroke(s, 0f, 70f, new Vector2(250, 200)), "water");
+
+        // Negatives: shapes that must never cast.
+        await DrawStrokes("circle", CircleStrokes(), null);
+        await DrawStrokes("straight-line", [new List<Vector2> { new(100, 100), new(500, 500) }], null);
+        await DrawStrokes("horizontal-wave", WaveStrokes(), null);
 
         GD.Print($"SELFTEST SUMMARY: passed={_passed} failed={_failed}");
         await WaitFrames(2);
@@ -61,17 +74,17 @@ public partial class RecognitionSelfTest : Node
 
     // ---- Drawing helpers (through the real input pipeline) ----
 
-    private async Task DrawRune(string name, Func<IReadOnlyList<Vector2>, List<Vector2>> transform, bool expectCast)
+    private async Task DrawRune(string name, RuneTemplate template, Func<IReadOnlyList<Vector2>, List<Vector2>> transform, string expectedRune)
     {
         List<List<Vector2>> strokes = [];
-        foreach (IReadOnlyList<Vector2> templateStroke in RuneTemplates.Fire.Strokes)
+        foreach (IReadOnlyList<Vector2> templateStroke in template.Strokes)
         {
             strokes.Add(transform(templateStroke));
         }
-        await DrawStrokes(name, strokes, expectCast);
+        await DrawStrokes(name, strokes, expectedRune);
     }
 
-    private async Task DrawStrokes(string name, List<List<Vector2>> strokes, bool expectCast)
+    private async Task DrawStrokes(string name, List<List<Vector2>> strokes, string? expectedRune)
     {
         await ClearCanvas();
         int previousCasts = _surface.CastCount;
@@ -89,16 +102,30 @@ public partial class RecognitionSelfTest : Node
                 }
             }
             SendMouseButton(stroke[^1], false);
-            await WaitFrames(2);
+            await WaitFrames(1);
         }
+
+        // Identification is manual now: draw, then press the button.
+        _surface.Identify();
         await WaitFrames(3);
 
         string cast = _surface.LastCast ?? "";
         bool casted = _surface.CastCount > previousCasts;
         bool flashed = _surface.FlashCount > previousFlashes;
-        bool ok = casted == expectCast && flashed == expectCast;
+        bool ok = casted == (expectedRune is not null)
+                  && flashed == (expectedRune is not null);
+
+        if (expectedRune is not null)
+        {
+            bool rightRune = cast.StartsWith(expectedRune, StringComparison.OrdinalIgnoreCase);
+            Color expectedColor = expectedRune == "water" ? _surface.WaterFlashColor : _surface.FireFlashColor;
+            bool rightColor = _surface.LastFlashColor.IsEqualApprox(expectedColor);
+            ok = ok && rightRune && rightColor;
+        }
+
         if (ok) _passed++; else _failed++;
-        GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [{name}] casted={casted} flashed={flashed} strokes={_surface.StrokeCount} points={_surface.PointCount} lastCast='{cast}' candidate='{_surface.Candidate}'");
+        GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [{name}] casted={casted} flashed={flashed} " +
+                 $"color={_surface.LastFlashColor.ToHtml()} lastCast='{cast}' candidate='{_surface.Candidate}'");
     }
 
     private async Task ClearCanvas()
