@@ -24,6 +24,7 @@ public partial class DrawingSurface : Node2D
     [Export] public float FlashDuration { get; set; } = 0.5f;
     [Export] public Color FireFlashColor { get; set; } = new(1f, 0.1f, 0.05f, 0.55f);
     [Export] public Color WaterFlashColor { get; set; } = new(0.1f, 0.35f, 1f, 0.55f);
+    [Export] public Color DensityFlashColor { get; set; } = new(0.15f, 0.85f, 0.25f, 0.55f);
     [Export] public Color DefaultFlashColor { get; set; } = new(1f, 0.6f, 0.1f, 0.55f);
     [Export] public float MinPointDistance
     {
@@ -256,11 +257,12 @@ public partial class DrawingSurface : Node2D
         QueueRedraw();
     }
 
-    /// <summary>Per-rune flash colour: fire red, water blue, fallback orange.</summary>
+    /// <summary>Per-rune flash colour: fire red, water blue, density green, fallback orange.</summary>
     private Color FlashColorFor(string? runeName) => runeName switch
     {
         "fire" => FireFlashColor,
         "water" => WaterFlashColor,
+        "density" => DensityFlashColor,
         _ => DefaultFlashColor,
     };
 

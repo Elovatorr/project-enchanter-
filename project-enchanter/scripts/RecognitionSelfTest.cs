@@ -63,6 +63,14 @@ public partial class RecognitionSelfTest : Node
         await DrawRune("water-scaled-down", RuneTemplates.Water,
             s => TransformStroke(s, 0f, 70f, new Vector2(250, 200)), "water");
 
+        // Density (zigzag + bar + V): expect cast + green flash.
+        await DrawRune("density-identity", RuneTemplates.Density,
+            s => TransformStroke(s, 0f, 200f, new Vector2(450, 300)), "density");
+        await DrawRune("density-rotated-40", RuneTemplates.Density,
+            s => TransformStroke(s, 40f, 230f, new Vector2(550, 320)), "density");
+        await DrawRune("density-scaled-down", RuneTemplates.Density,
+            s => TransformStroke(s, 0f, 70f, new Vector2(250, 200)), "density");
+
         // Negatives: shapes that must never cast.
         await DrawStrokes("circle", CircleStrokes(), null);
         await DrawStrokes("straight-line", [new List<Vector2> { new(100, 100), new(500, 500) }], null);
@@ -72,6 +80,7 @@ public partial class RecognitionSelfTest : Node
         await DrawMultiRune("two-circled-runes", TwoCircledRunes(), ["fire", "water"]);
         await DrawMultiRune("circled-unknown-shape", CircledUnknown(), []);
         await DrawMultiRune("circled-fire-only", CircledFireOnly(), ["fire"]);
+        await DrawMultiRune("three-circled-runes", ThreeCircledRunes(), ["fire", "water", "density"]);
 
         // The "Draw demo" button's ready-made two-rune case.
         await DemoRunesCase();
@@ -112,6 +121,26 @@ public partial class RecognitionSelfTest : Node
             CircleStroke(new Vector2(500, 350), 150f),
             TransformStroke(RuneTemplates.Fire.Strokes[0], 0f, 60f, new Vector2(500, 350)),
         ];
+    }
+
+    private static List<List<Vector2>> ThreeCircledRunes()
+    {
+        List<List<Vector2>> strokes = [];
+        (RuneTemplate Rune, Vector2 Center)[] cases =
+        [
+            (RuneTemplates.Fire, new Vector2(250, 300)),
+            (RuneTemplates.Water, new Vector2(700, 300)),
+            (RuneTemplates.Density, new Vector2(1150, 300)),
+        ];
+        foreach ((RuneTemplate rune, Vector2 center) in cases)
+        {
+            strokes.Add(CircleStroke(center, 150f));
+            foreach (IReadOnlyList<Vector2> stroke in rune.Strokes)
+            {
+                strokes.Add(TransformStroke(stroke, 0f, 55f, center));
+            }
+        }
+        return strokes;
     }
 
     // ---- Drawing helpers (through the real input pipeline) ----
@@ -178,9 +207,7 @@ public partial class RecognitionSelfTest : Node
             ok = ok && _surface.FlashCount - previousFlashes == expectedRunes.Length;
 
             // Each rune flashes in detection order: verify the whole sequence.
-            List<Color> expectedColors = expectedRunes
-                .Select(rune => rune == "water" ? _surface.WaterFlashColor : _surface.FireFlashColor)
-                .ToList();
+            List<Color> expectedColors = expectedRunes.Select(FlashColorForRune).ToList();
             List<Color> actualColors = _surface.FlashHistory.Skip(previousFlashHistory).ToList();
             ok = ok && actualColors.Count == expectedColors.Count
                     && actualColors.Zip(expectedColors).All(pair => pair.First.IsEqualApprox(pair.Second));
@@ -191,6 +218,13 @@ public partial class RecognitionSelfTest : Node
                  $"colors=[{string.Join(", ", _surface.FlashHistory.Skip(previousFlashHistory).Select(c => c.ToHtml()))}] " +
                  $"lastCast='{cast}' candidate='{_surface.Candidate}'");
     }
+
+    private Color FlashColorForRune(string rune) => rune switch
+    {
+        "water" => _surface.WaterFlashColor,
+        "density" => _surface.DensityFlashColor,
+        _ => _surface.FireFlashColor,
+    };
 
     private async Task DemoRunesCase()
     {

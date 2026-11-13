@@ -22,7 +22,7 @@ namespace ProjectEnchanter;
 public static class RuneFeatures
 {
     public const int TotalPoints = 48;
-    public const int FeatureCount = TotalPoints * 2 + 4;
+    public const int FeatureCount = TotalPoints * 2 + 6;
 
     /// <summary>Extracts the two mirror variants of the feature vector.</summary>
     public static (float[] Plus, float[] Minus) Extract(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
@@ -40,6 +40,7 @@ public static class RuneFeatures
 
         (float[] plus, float[] minus) = Canonicalize(points);
         (float thinness, float pathOverRms, float cornerFraction, float maxTurn) = StructuralFeatures(points);
+        (float strokeCount, float gapOverRms) = StrokeShapeFeatures(resampled, points);
 
         void AddStructural(float[] v)
         {
@@ -48,6 +49,8 @@ public static class RuneFeatures
             v[o + 1] = pathOverRms;
             v[o + 2] = cornerFraction;
             v[o + 3] = maxTurn;
+            v[o + 4] = strokeCount;
+            v[o + 5] = gapOverRms;
         }
 
         AddStructural(plus);
@@ -121,6 +124,42 @@ public static class RuneFeatures
             i += 2;
         }
         return (plus, minus);
+    }
+
+    // ---- Stroke topology (rotation/scale invariant) ----
+
+    /// <summary>Stroke count (normalized) and mean gap between consecutive strokes, over RMS.</summary>
+    private static (float StrokeCount, float GapOverRms) StrokeShapeFeatures(
+        List<List<Vector2>> resampledStrokes, List<Vector2> points)
+    {
+        if (points.Count == 0) return (0f, 0f);
+
+        Vector2 centroid = Vector2.Zero;
+        foreach (Vector2 p in points) centroid += p;
+        centroid /= points.Count;
+
+        float sq = 0f;
+        foreach (Vector2 p in points)
+        {
+            Vector2 d = p - centroid;
+            sq += d.X * d.X + d.Y * d.Y;
+        }
+        float rms = MathF.Sqrt(sq / points.Count);
+        if (rms < 0.0001f) return (0f, 0f);
+
+        float gapSum = 0f;
+        int gaps = 0;
+        for (int i = 1; i < resampledStrokes.Count; i++)
+        {
+            List<Vector2> previous = resampledStrokes[i - 1];
+            List<Vector2> current = resampledStrokes[i];
+            if (previous.Count == 0 || current.Count == 0) continue;
+            gapSum += previous[^1].DistanceTo(current[0]);
+            gaps++;
+        }
+        float meanGap = gaps > 0 ? gapSum / gaps : 0f;
+
+        return (resampledStrokes.Count / 5f, meanGap / rms);
     }
 
     // ---- Structural features (rotation/scale invariant) ----

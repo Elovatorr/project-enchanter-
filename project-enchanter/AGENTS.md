@@ -28,7 +28,7 @@ than no guidance.
 | `resources/rune_model/` | Trained weights as plain CSV (w1, b1, w2, b2, feature_mean/std, meta, parity). Embedded into the assembly; `.gdignore`d for Godot. |
 | `scripts/EnclosedRuneDetector.cs` | Pure C# — finds circle strokes and groups the runes drawn inside them (multi-rune drawings). |
 | `scripts/RuneTemplate.cs` | Pure C# record: a named rune and its reference strokes. |
-| `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test (currently `Fire`, a caret). |
+| `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test: `Fire` (caret), `Water` (two waves), `Density` (zigzag + bar + V). |
 | `scripts/RecognitionSelfTest.cs` | In-engine automated test driver, run as a scene (see "Testing in engine"). |
 | `tests/project-enchanter.tests.csproj` | xUnit test project (net8.0). |
 | `tests/DrawingSurfaceModelTests.cs` | Unit/regression tests for the drawing model. |
@@ -58,14 +58,14 @@ weights compiled in). Pipeline:
 1. **Resample** — strokes → points evenly spaced by arc length (48 total, split proportional to stroke length).
 2. **Smooth** — 1-2-1 moving average, 2 passes (per-stroke).
 3. **Canonicalize** — centroid at origin, RMS radius 1, rotate onto the PCA axis. The axis sign is ambiguous: resolve the 180° flip deterministically via radius-weighted x skew, then emit two mirror variants (the model averages their predictions).
-4. **Structural features** — eigenvalue ratio (thinness), path/RMS, corner fraction, sharpest turn.
-5. **Standardize + MLP** — z-score using trainer-provided mean/std, then 100 → 96 (ReLU) → classes (softmax).
+4. **Structural features** — eigenvalue ratio (thinness), path/RMS, corner fraction, sharpest turn, stroke count (normalized), mean inter-stroke gap/RMS.
+5. **Standardize + MLP** — z-score using trainer-provided mean/std, then 102 → 160 (ReLU) → classes (softmax).
 6. **Classify** — argmax over the non-"unknown" classes; cast when probability ≥ `RuneClassifier.MatchThreshold` (0.6). All-zero (degenerate) feature vectors are rejected outright.
 7. **Multi-rune drawings** — if the drawing contains circles, `EnclosedRuneDetector.Find` identifies circle-like strokes (closed, round, full direction coverage, circumference-length path, radius range < 30%) and groups the non-circle strokes inside each (smallest enclosing circle wins; nested circles cast once). Each group is classified independently and all matches cast together. Flashes run in succession in **left-to-right** order (sorted by circle centre x), one colour per rune.
 8. **Identification is manual** — strokes are not classified automatically. The player presses the on-screen **Identify rune** button, which calls `DrawingSurface.Identify()`: circled runes are classified individually; with no circles, the whole drawing is classified as a single rune. A **Draw demo (fire + water)** button (`DrawDemoRunes()`) fills the canvas with a ready-made two-circled-rune test case.
-9. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DefaultFlashColor` fallback); multiple runes flash their colours in sequence. All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
+9. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DensityFlashColor` green, `DefaultFlashColor` fallback); multiple runes flash their colours in sequence. All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
 
-Runes: **fire** (one-stroke caret), **water** (two parallel waves). Current model: held-out accuracy ≈ 99.3%, fire recall ≈ 99.1%, water recall ≈ 99.4%.
+Runes: **fire** (one-stroke caret), **water** (two parallel waves), **density** (zigzag + horizontal bar + lower V). Current model: held-out accuracy ≈ 99.8%, with fire 99.6%, water 100%, density 100%, unknown 99.7%.
 
 ### Retraining and changing runes
 
@@ -74,7 +74,7 @@ pip install numpy
 python tools/train_rune_model.py     # rewrites resources/rune_model/*.csv
 ```
 
-- Model parameters live in `resources/rune_model/` as **plain CSV** (`w1.csv` 96×100, `b1.csv`, `w2.csv`, `b2.csv`, `feature_mean.csv`, `feature_std.csv`, `meta.csv`, plus parity files). They are compiled in as embedded resources by the csproj, so the game and tests read them without file IO. Edit them by hand and rebuild if needed — but keep dimensions consistent with `meta.csv` (the loader validates shapes and fails loudly).
+- Model parameters live in `resources/rune_model/` as **plain CSV** (`w1.csv` 160×102, `b1.csv`, `w2.csv`, `b2.csv`, `feature_mean.csv`, `feature_std.csv`, `meta.csv`, plus parity files). They are compiled in as embedded resources by the csproj, so the game and tests read them without file IO. Edit them by hand and rebuild if needed — but keep dimensions consistent with `meta.csv` (the loader validates shapes and fails loudly).
 - Training data is synthesized in the script: the rune template(s) from `RuneTemplates.cs` (mirrored manually in Python as `FIRE`) plus augmentation (rotation, scale, translation, jitter, densification) and an "unknown" class of scribbles/letters/shapes.
 - **When adding a rune**: add its points to `tools/train_rune_model.py` (add to `RUNES` and `OUTPUT_NAMES`), mirror it in `scripts/RuneTemplates.cs`, add a flash colour in `DrawingSurface.FlashColorFor()`, retrain, then add classifier tests (classifies at transforms, isn't confused with existing runes, and near-misses are rejected).
 - **Parity guard**: the trainer embeds a reference feature vector (`parity_features.csv`) computed for the fire template; `RuneFeaturesTests.Extract_MatchesPythonTrainerParitySample` fails if the C# feature code drifts. If you change `RuneFeatures.cs`, change `extract_features` in the trainer identically and retrain.
@@ -98,7 +98,7 @@ dotnet build    # REQUIRED: Godot loads the prebuilt DLL; it does not compile
 # and read the log with get_debug_output / the app_userdata log file.
 ```
 
-It draws fire and water at various transforms (expect the right rune cast + its flash colour: red for fire, blue for water), circle/line/wave (expect no cast and no flash), multi-rune cases (two circled runes → both cast, two sequential flashes; circled unknown shape → no cast; circled fire alone → fire), and the demo-button case. It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
+It draws fire, water and density at various transforms (expect the right rune cast + its flash colour: red / blue / green), circle/line/wave (expect no cast and no flash), multi-rune cases (two circled runes → both cast, two sequential flashes; three circled runes → all three in left-to-right order; circled unknown shape → no cast; circled fire alone → fire), and the demo-button case. It calls `DrawingSurface.Identify()` after drawing, matching the button flow. **Always `dotnet build` before running** — otherwise the game silently runs the previous DLL (this has caused false debugging detours).
 
 ## Commands
 
@@ -114,6 +114,10 @@ python tools/train_rune_model.py
 
 # Run the game: press F5 inside the Godot editor (Rider alone will not launch it)
 ```
+
+**Training terminal preference:** launch training in a **visible console window** so the user can watch epoch progress — on Windows use
+`Start-Process python -ArgumentList "tools\train_rune_model.py" -WorkingDirectory <project>`
+rather than a hidden/background shell. Training takes a few minutes.
 
 The Godot editor's log is at
 `%APPDATA%\Godot\app_userdata\project enchanter\logs\godot.log` — check it

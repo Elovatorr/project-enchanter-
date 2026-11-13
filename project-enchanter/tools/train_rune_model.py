@@ -27,13 +27,13 @@ import random
 import numpy as np
 
 TOTAL_POINTS = 48
-INPUT_SIZE = TOTAL_POINTS * 2 + 4
-HIDDEN_SIZE = 96
-OUTPUT_NAMES = ["unknown", "fire", "water"]
+INPUT_SIZE = TOTAL_POINTS * 2 + 6
+HIDDEN_SIZE = 160
+OUTPUT_NAMES = ["unknown", "fire", "water", "density"]
 
 SEED = 1234
 SAMPLES_PER_CLASS = 8000
-EPOCHS = 60
+EPOCHS = 120
 BATCH_SIZE = 64
 LEARNING_RATE = 0.01
 
@@ -190,6 +190,24 @@ def structural_features(points):
     return thinness, path / rms, corner_frac, max_turn / math.pi
 
 
+def stroke_shape_features(strokes, points):
+    """Stroke topology, invariant to position/scale/rotation:
+    stroke count (normalized) and mean gap between consecutive strokes."""
+    n = len(strokes)
+    if len(points) == 0:
+        return 0.0, 0.0
+
+    cx = sum(p[0] for p in points) / len(points)
+    cy = sum(p[1] for p in points) / len(points)
+    rms = math.sqrt(sum((p[0] - cx) ** 2 + (p[1] - cy) ** 2 for p in points) / len(points))
+    if rms < 1e-4:
+        return 0.0, 0.0
+
+    gaps = [math.dist(strokes[i - 1][-1], strokes[i][0]) for i in range(1, n)]
+    mean_gap = sum(gaps) / len(gaps) if gaps else 0.0
+    return n / 5.0, mean_gap / rms
+
+
 def extract_features(strokes: list[list[tuple[float, float]]]) -> tuple[np.ndarray, np.ndarray]:
     """Mirror of RuneFeatures.Extract in C#. Returns both mirror variants."""
     resampled = resample_strokes(strokes, TOTAL_POINTS)
@@ -199,7 +217,7 @@ def extract_features(strokes: list[list[tuple[float, float]]]) -> tuple[np.ndarr
         zero = np.zeros(INPUT_SIZE, dtype=np.float32)
         return zero, zero
     variants = canonicalize(points)
-    extra = np.array(structural_features(points), dtype=np.float32)
+    extra = np.array(structural_features(points) + stroke_shape_features(resampled, points), dtype=np.float32)
 
     out = []
     for v in variants:
@@ -222,8 +240,14 @@ WATER = [
      (0.00, 0.60), (0.20, 0.78), (0.42, 0.82), (0.62, 0.72), (0.82, 0.50), (1.02, 0.22)],
 ]
 
+DENSITY = [
+    [(-0.75, -0.20), (-0.35, -0.85), (-0.05, -0.35), (0.25, -0.90), (0.55, -0.20)],
+    [(-0.85, 0.06), (0.00, 0.02), (0.85, 0.06)],
+    [(-0.35, 0.55), (0.05, 1.05), (0.50, 0.50)],
+]
+
 # label index -> rune template
-RUNES = {1: FIRE, 2: WATER}
+RUNES = {1: FIRE, 2: WATER, 3: DENSITY}
 
 
 def circle():

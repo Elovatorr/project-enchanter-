@@ -1,7 +1,7 @@
 key,value
-input_size,100
-hidden_size,96
-output_size,3
-output_names,unknown;fire;water
+input_size,102
+hidden_size,160
+output_size,4
+output_names,unknown;fire;water;density
 parity_stroke_lengths,9
-trained_accuracy,0.992778
+trained_accuracy,0.998125

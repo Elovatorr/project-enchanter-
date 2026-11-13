@@ -61,4 +61,31 @@ public static class RuneTemplates
             new( 0.82f,  0.50f),
             new( 1.02f,  0.22f),
         });
+
+    /// <summary>
+    /// "Density": a zigzag double-peak stroke on top, a horizontal bar beneath
+    /// it, and a downward V below the bar.
+    /// </summary>
+    public static RuneTemplate Density { get; } = new(
+        "density",
+        new Vector2[]
+        {
+            new(-0.75f, -0.20f),
+            new(-0.35f, -0.85f),
+            new(-0.05f, -0.35f),
+            new( 0.25f, -0.90f),
+            new( 0.55f, -0.20f),
+        },
+        new Vector2[]
+        {
+            new(-0.85f,  0.06f),
+            new( 0.00f,  0.02f),
+            new( 0.85f,  0.06f),
+        },
+        new Vector2[]
+        {
+            new(-0.35f,  0.55f),
+            new( 0.05f,  1.05f),
+            new( 0.50f,  0.50f),
+        });
 }

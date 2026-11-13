@@ -219,6 +219,49 @@ public class RuneClassifierTests
         Assert.Null(NewClassifier().Recognize([wave]));
     }
 
+    // ---- Density rune ----
+
+    [Fact]
+    public void Recognize_DensityTemplate_CastsDensity()
+    {
+        RuneMatch? match = NewClassifier().Recognize(RuneTemplates.Density.Strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("density", match!.Name);
+    }
+
+    [Fact]
+    public void Recognize_DensityTranslatedAndScaled_CastsDensity()
+    {
+        var strokes = Transform(RuneTemplates.Density.Strokes, scale: 260f, offset: new Vector2(500, 250));
+
+        RuneMatch? match = NewClassifier().Recognize(strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("density", match!.Name);
+    }
+
+    [Theory]
+    [InlineData(45f)]
+    [InlineData(180f)]
+    [InlineData(300f)]
+    public void Recognize_DensityRotated_CastsDensity(float degrees)
+    {
+        var strokes = Transform(RuneTemplates.Density.Strokes, degrees * MathF.PI / 180f, 200f, new Vector2(400, 300));
+
+        RuneMatch? match = NewClassifier().Recognize(strokes);
+
+        Assert.NotNull(match);
+        Assert.Equal("density", match!.Name);
+    }
+
+    [Fact]
+    public void Recognize_DensityPartial_DoesNotCast()
+    {
+        // Only the zigzag stroke: not the full three-stroke rune.
+        Assert.Null(NewClassifier().Recognize([RuneTemplates.Density.Strokes[0].ToList()]));
+    }
+
     // ---- Diagnostics (HUD) ----
 
     [Fact]
