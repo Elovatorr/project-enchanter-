@@ -21,15 +21,28 @@ public sealed record EnclosedRune(
 /// </summary>
 public static class EnclosedRuneDetector
 {
-    private const float ClosureGap = 0.35f;      // max start/end gap, × radius
-    private const float MaxRadiusVariation = 0.20f; // std/mean radius
-    private const float MaxRadiusRange = 0.30f;     // (max-min)/mean, rejects squares
+    private const float ClosureGap = 0.65f;      // max start/end gap, × radius (hand circles end unevenly)
+    private const float MaxRadiusVariation = 0.26f; // std/mean radius
+    private const float MaxRadiusRange = 0.38f;     // (max-min)/mean, allows ovals
     private const int DirectionBins = 36;
-    private const float MinDirectionCoverage = 0.75f;
-    private const float PathRatioMin = 0.6f;     // path / circumference
-    private const float PathRatioMax = 1.6f;
+    private const float MinDirectionCoverage = 0.70f;
+    private const float PathRatioMin = 0.5f;     // path / circumference
+    private const float PathRatioMax = 1.8f;
+    private const int MaxSharpTurns = 2;         // polygons have corners; circles don't
+    private const float SharpTurnRadians = MathF.PI / 3f; // 60°
     private const float InsideFraction = 0.85f;  // points inside to consider enclosed
-    private const float InsideMargin = 1.05f;    // × radius
+    private const float InsideMargin = 1.10f;    // × radius
+
+    /// <summary>Counts stroke(s) that look like hand-drawn circles.</summary>
+    public static int CountCircles(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
+    {
+        int count = 0;
+        foreach (IReadOnlyList<Vector2> stroke in strokes)
+        {
+            if (TryFitCircle(stroke, out _, out _)) count++;
+        }
+        return count;
+    }
 
     /// <summary>
     /// Returns one group per circle that encloses at least one non-circle
@@ -140,6 +153,25 @@ public static class EnclosedRuneDetector
 
         float pathRatio = path / (MathF.Tau * mean);
         if (pathRatio < PathRatioMin || pathRatio > PathRatioMax) return false; // spiral/scribble
+
+        // Reject polygons: a circle's direction changes smoothly, while square
+        // corners produce several sharp turns.
+        int sharpTurns = 0;
+        Vector2 previousDir = Vector2.Zero;
+        for (int i = 1; i < stroke.Count; i++)
+        {
+            Vector2 d = stroke[i] - stroke[i - 1];
+            if (d.LengthSquared() < 1e-8f) continue;
+
+            if (previousDir != Vector2.Zero)
+            {
+                float turn = MathF.Abs(MathF.Atan2(d.X * previousDir.Y - d.Y * previousDir.X,
+                                                   d.X * previousDir.X + d.Y * previousDir.Y));
+                if (turn > SharpTurnRadians) sharpTurns++;
+                if (sharpTurns > MaxSharpTurns) return false;
+            }
+            previousDir = d;
+        }
 
         float gap = stroke[0].DistanceTo(stroke[^1]);
         if (gap > ClosureGap * mean) return false; // not closed

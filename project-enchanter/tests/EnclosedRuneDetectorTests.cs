@@ -213,6 +213,102 @@ public class EnclosedRuneDetectorTests
         Assert.Equal(["fire", "water"], names);
     }
 
+    // ---- Realistic hand-drawn circles ----
+
+    /// <summary>Simulates a human circle: oval, wobbly, uneven sampling, open gap.</summary>
+    private static List<Vector2> HandDrawnCircle(
+        Vector2 center, float radius, int seed,
+        float aspect = 1.15f, float gapDegrees = 20f, int points = 34, float jitter = 0.03f,
+        float startDegrees = 0f)
+    {
+        var rnd = new Random(seed);
+        float sweep = MathF.Tau - gapDegrees * MathF.PI / 180f;
+        float wobblePhase = (float)rnd.NextDouble() * MathF.Tau;
+        List<Vector2> circle = [];
+        for (int i = 0; i <= points; i++)
+        {
+            float t = (float)i / points;
+            float angle = startDegrees * MathF.PI / 180f + t * sweep;
+            // Low-frequency radius wobble + per-point jitter.
+            float r = radius * (1f + 0.04f * MathF.Sin(wobblePhase + t * MathF.Tau * 1.5f)
+                                + (float)(rnd.NextDouble() - 0.5) * 2f * jitter);
+            circle.Add(center + new Vector2(MathF.Cos(angle) * r * aspect, MathF.Sin(angle) * r));
+        }
+        return circle;
+    }
+
+    [Fact]
+    public void Find_HandDrawnCirclesWithRunes_ReturnsBothGroups()
+    {
+        List<List<Vector2>> strokes =
+        [
+            HandDrawnCircle(new Vector2(300, 300), 130f, seed: 1),
+            ScaledShape(RuneTemplates.Fire.Strokes[0], 50f, new Vector2(300, 300)),
+            HandDrawnCircle(new Vector2(800, 300), 130f, seed: 2),
+            ScaledShape(RuneTemplates.Water.Strokes[0], 50f, new Vector2(800, 300)),
+            ScaledShape(RuneTemplates.Water.Strokes[1], 50f, new Vector2(800, 300)),
+        ];
+
+        List<EnclosedRune> regions = EnclosedRuneDetector.Find(strokes);
+
+        Assert.Equal(2, regions.Count);
+        Assert.Single(regions[0].Strokes);
+        Assert.Equal(2, regions[1].Strokes.Count);
+    }
+
+    [Fact]
+    public void Find_HandDrawnCircle_VariousStyles_AllDetected()
+    {
+        // Wider gap, stronger ovalness, more wobble, different start angles.
+        (int Seed, float Aspect, float Gap, float Jitter, float Start)[] styles =
+        [
+            (11, 1.10f, 25f, 0.03f, 0f),
+            (12, 1.20f, 15f, 0.05f, 90f),
+            (13, 1.05f, 35f, 0.02f, 200f),
+            (14, 1.25f, 10f, 0.04f, 315f),
+        ];
+
+        foreach (var style in styles)
+        {
+            List<List<Vector2>> strokes =
+            [
+                HandDrawnCircle(new Vector2(400, 300), 120f, style.Seed,
+                    style.Aspect, style.Gap, 30, style.Jitter, style.Start),
+                ScaledShape(RuneTemplates.Fire.Strokes[0], 45f, new Vector2(400, 300)),
+            ];
+
+            List<EnclosedRune> regions = EnclosedRuneDetector.Find(strokes);
+
+            Assert.True(regions.Count == 1,
+                $"style seed={style.Seed} aspect={style.Aspect} gap={style.Gap} jitter={style.Jitter}: " +
+                $"expected 1 region, got {regions.Count}");
+        }
+    }
+
+    [Fact]
+    public void Classify_TwoCircledWaters_FindsBoth()
+    {
+        // Duplicate runes are fine: each circle is classified independently.
+        var classifier = new RuneClassifier();
+        List<List<Vector2>> strokes = [];
+        foreach (Vector2 center in new[] { new Vector2(300, 300), new Vector2(800, 300) })
+        {
+            strokes.Add(Circle(center, 140f));
+            foreach (IReadOnlyList<Vector2> wave in RuneTemplates.Water.Strokes)
+            {
+                strokes.Add(ScaledShape(wave, 55f, center));
+            }
+        }
+
+        List<string> names = EnclosedRuneDetector.Find(strokes)
+            .Select(region => classifier.Recognize(region.Strokes))
+            .Where(match => match is not null)
+            .Select(match => match!.Name)
+            .ToList();
+
+        Assert.Equal(["water", "water"], names);
+    }
+
     [Fact]
     public void Classify_CircleWithWrongShape_DoesNotCast()
     {

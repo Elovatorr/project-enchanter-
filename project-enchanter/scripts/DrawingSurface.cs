@@ -36,6 +36,7 @@ public partial class DrawingSurface : Node2D
     public string? Candidate => _candidate;
     public int CastCount { get; private set; }
     public int FlashCount { get; private set; }
+    public int CircleCount { get; private set; }
     public Color LastFlashColor { get; private set; }
     public IReadOnlyList<Color> FlashHistory => _flashHistory;
 
@@ -64,7 +65,7 @@ public partial class DrawingSurface : Node2D
 
         Button demoButton = new()
         {
-            Text = "Draw demo (fire + water)",
+            Text = "Draw demo (3 runes)",
             CustomMinimumSize = new Vector2(220, 44),
         };
         demoButton.Pressed += DrawDemoRunes;
@@ -86,8 +87,8 @@ public partial class DrawingSurface : Node2D
     }
 
     /// <summary>
-    /// Fills the canvas with a ready-made two-rune test case: a circled fire
-    /// rune and a circled water rune, side by side.
+    /// Fills the canvas with a ready-made multi-rune test case: circled fire,
+    /// water and density runes, side by side.
     /// </summary>
     public void DrawDemoRunes()
     {
@@ -97,11 +98,12 @@ public partial class DrawingSurface : Node2D
 
         Rect2 view = GetViewportRect();
         Vector2 center = view.Size / 2f;
-        float radius = MathF.Min(view.Size.X, view.Size.Y) * 0.15f;
-        float gap = radius * 2.8f;
+        float radius = MathF.Min(view.Size.X, view.Size.Y) * 0.13f;
+        float gap = radius * 2.7f;
 
-        AddCircledRune(RuneTemplates.Fire, center - new Vector2(gap / 2f, 0f), radius);
-        AddCircledRune(RuneTemplates.Water, center + new Vector2(gap / 2f, 0f), radius);
+        AddCircledRune(RuneTemplates.Fire, center - new Vector2(gap, 0f), radius);
+        AddCircledRune(RuneTemplates.Water, center, radius);
+        AddCircledRune(RuneTemplates.Density, center + new Vector2(gap, 0f), radius);
 
         QueueRedraw();
     }
@@ -138,6 +140,7 @@ public partial class DrawingSurface : Node2D
     /// </summary>
     public void Identify()
     {
+        CircleCount = EnclosedRuneDetector.CountCircles(_model.Strokes);
         List<EnclosedRune> regions = EnclosedRuneDetector.Find(_model.Strokes);
         if (regions.Count > 0)
         {
@@ -295,7 +298,7 @@ public partial class DrawingSurface : Node2D
         // Classification HUD (top-left): live candidate info + last successful cast.
         Font font = ThemeDB.FallbackFont;
         DrawString(font, new Vector2(16, 30),
-            $"Drawing: {_model.Strokes.Count} stroke(s)", HorizontalAlignment.Left, -1, 22, Colors.LightGray);
+            $"Drawing: {_model.Strokes.Count} stroke(s)   Circles: {CircleCount}", HorizontalAlignment.Left, -1, 22, Colors.LightGray);
         DrawString(font, new Vector2(16, 58),
             $"Best match: {_candidate ?? "press Identify"}", HorizontalAlignment.Left, -1, 22,
             _candidate is not null && _candidate.Contains("cast!") ? Colors.Gold : Colors.White);

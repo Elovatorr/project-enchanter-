@@ -81,6 +81,7 @@ public partial class RecognitionSelfTest : Node
         await DrawMultiRune("circled-unknown-shape", CircledUnknown(), []);
         await DrawMultiRune("circled-fire-only", CircledFireOnly(), ["fire"]);
         await DrawMultiRune("three-circled-runes", ThreeCircledRunes(), ["fire", "water", "density"]);
+        await DrawMultiRune("two-handdrawn-circles", TwoHandDrawnCircles(), ["fire", "water"]);
 
         // The "Draw demo" button's ready-made two-rune case.
         await DemoRunesCase();
@@ -121,6 +122,37 @@ public partial class RecognitionSelfTest : Node
             CircleStroke(new Vector2(500, 350), 150f),
             TransformStroke(RuneTemplates.Fire.Strokes[0], 0f, 60f, new Vector2(500, 350)),
         ];
+    }
+
+    private static List<List<Vector2>> TwoHandDrawnCircles()
+    {
+        List<List<Vector2>> strokes = [HandDrawnCircle(new Vector2(350, 320), 140f, seed: 7)];
+        strokes.Add(TransformStroke(RuneTemplates.Fire.Strokes[0], 0f, 55f, new Vector2(350, 320)));
+
+        strokes.Add(HandDrawnCircle(new Vector2(800, 320), 140f, seed: 8));
+        foreach (IReadOnlyList<Vector2> wave in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(TransformStroke(wave, 0f, 55f, new Vector2(800, 320)));
+        }
+        return strokes;
+    }
+
+    /// <summary>Simulates a human circle: oval, wobbly, uneven, with an open gap.</summary>
+    private static List<Vector2> HandDrawnCircle(Vector2 center, float radius, int seed)
+    {
+        var rnd = new Random(seed);
+        float sweep = MathF.Tau - 22f * MathF.PI / 180f; // ~22° gap
+        float phase = (float)rnd.NextDouble() * MathF.Tau;
+        List<Vector2> circle = [];
+        for (int i = 0; i <= 34; i++)
+        {
+            float t = (float)i / 34f;
+            float angle = t * sweep;
+            float r = radius * (1f + 0.04f * MathF.Sin(phase + t * MathF.Tau * 1.5f)
+                                + (float)(rnd.NextDouble() - 0.5) * 0.06f);
+            circle.Add(center + new Vector2(MathF.Cos(angle) * r * 1.15f, MathF.Sin(angle) * r));
+        }
+        return circle;
     }
 
     private static List<List<Vector2>> ThreeCircledRunes()
@@ -238,10 +270,11 @@ public partial class RecognitionSelfTest : Node
         await WaitFrames(3);
 
         string cast = _surface.LastCast ?? "";
-        bool ok = _surface.CastCount - previousCasts == 2
-                  && _surface.FlashCount - previousFlashes == 2
+        bool ok = _surface.CastCount - previousCasts == 3
+                  && _surface.FlashCount - previousFlashes == 3
                   && cast.Contains("fire", StringComparison.OrdinalIgnoreCase)
-                  && cast.Contains("water", StringComparison.OrdinalIgnoreCase);
+                  && cast.Contains("water", StringComparison.OrdinalIgnoreCase)
+                  && cast.Contains("density", StringComparison.OrdinalIgnoreCase);
 
         if (ok) _passed++; else _failed++;
         GD.Print($"SELFTEST {(ok ? "PASS" : "FAIL")} [demo-runes] casted={_surface.CastCount - previousCasts} " +
