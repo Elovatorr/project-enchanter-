@@ -50,18 +50,20 @@ float fbm(vec2 p) {
 
 void vertex() {
 	// Gentle whip that grows toward the far tip (UV.y = 1) so the jet feels
-	// like moving water instead of a rigid tube.
+	// like moving water instead of a rigid tube. The phase moves toward the
+	// muzzle (UV.y = 0) so the motion flows back along the jet.
 	float tip = UV.y;
-	float phase = UV.y * 9.0 - TIME * flow_speed;
+	float phase = UV.y * 9.0 + TIME * flow_speed;
 	VERTEX.x += sin(phase) * wobble * tip;
 	VERTEX.z += cos(phase * 0.7) * wobble * tip;
 }
 
 void fragment() {
 	// UV.x wraps around the cylinder; UV.y runs from the muzzle (0) to the tip (1).
-	vec2 flow_uv = vec2(UV.x * 2.0, UV.y * 3.0 - TIME * flow_speed * 0.35);
+	// The noise scrolls toward the muzzle so the surface flow runs the other way.
+	vec2 flow_uv = vec2(UV.x * 2.0, UV.y * 3.0 + TIME * flow_speed * 0.35);
 	float streaks = fbm(vec2(flow_uv.x * streak_scale, flow_uv.y * 2.0));
-	float fine = value_noise(vec2(UV.x * 26.0, UV.y * 18.0 - TIME * flow_speed * 1.4));
+	float fine = value_noise(vec2(UV.x * 26.0, UV.y * 18.0 + TIME * flow_speed * 1.4));
 	float foam_mask = smoothstep(0.55, 0.85, streaks * 0.7 + fine * 0.3) * foam;
 
 	// A water tube reads as round because its silhouette (grazing angles) is
