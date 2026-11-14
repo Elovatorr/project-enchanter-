@@ -55,7 +55,7 @@ public partial class RecognitionSelfTest : Node
         await DrawRune("fire-scaled-down", RuneTemplates.Fire,
             s => TransformStroke(s, 0f, 60f, new Vector2(150, 150)), "fire");
 
-        // Water (arch + feet loops + bar + apex notch): expect cast + blue flash.
+        // Water (two stacked waves): expect cast + blue flash.
         await DrawRune("water-identity", RuneTemplates.Water,
             s => TransformStroke(s, 0f, 200f, new Vector2(450, 300)), "water");
         await DrawRune("water-rotated-25", RuneTemplates.Water,

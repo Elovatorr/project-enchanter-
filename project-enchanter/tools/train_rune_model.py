@@ -234,23 +234,15 @@ FIRE = [
 ]
 
 WATER = [
-    # Left side: from the apex down the leg, then around the left foot loop
-    # (the loop is part of this stroke so it is not mistaken for a rune-enclosing
-    # circle by EnclosedRuneDetector).
-    [(-0.06, -0.99), (-0.13, -0.94), (-0.20, -0.83), (-0.27, -0.66), (-0.33, -0.45),
-     (-0.38, -0.20), (-0.41, 0.05), (-0.43, 0.25), (-0.44, 0.42),
-     (-0.60, 0.48), (-0.65, 0.62), (-0.63, 0.77), (-0.52, 0.86), (-0.38, 0.88),
-     (-0.27, 0.80), (-0.24, 0.66), (-0.31, 0.52), (-0.40, 0.44), (-0.44, 0.42)],
-    # Right side: from the apex down the leg, then around the right foot loop.
-    [(0.04, -0.98), (0.11, -0.91), (0.17, -0.78), (0.22, -0.60), (0.26, -0.38),
-     (0.28, -0.15), (0.28, 0.08), (0.27, 0.26), (0.28, 0.36),
-     (0.18, 0.46), (0.13, 0.60), (0.17, 0.74), (0.28, 0.83), (0.42, 0.85),
-     (0.55, 0.80), (0.63, 0.67), (0.63, 0.53), (0.53, 0.41), (0.40, 0.34),
-     (0.30, 0.34), (0.28, 0.36)],
-    # Horizontal crossbar through the upper part of the arch.
-    [(-0.52, -0.05), (-0.02, -0.10), (0.52, -0.08)],
-    # Short notch hanging from the inside of the apex.
-    [(0.00, -0.88), (-0.02, -0.70), (-0.03, -0.52)],
+    # Upper wave: rises to a sharp peak, dips through a trough, then climbs to
+    # end high on the right.
+    [(-1.24, 0.03), (-0.99, -0.43), (-0.74, -0.89), (-0.65, -0.96), (-0.48, -0.68),
+     (-0.15, -0.30), (0.19, -0.05), (0.32, -0.02), (0.53, -0.26), (0.78, -0.60),
+     (1.05, -0.90)],
+    # Lower wave: the same rise/dip/rise shape, offset down and to the right.
+    [(-1.09, 0.96), (-0.95, 0.62), (-0.74, 0.16), (-0.63, -0.05), (-0.44, 0.24),
+     (-0.11, 0.58), (0.21, 0.85), (0.38, 0.96), (0.61, 0.75), (0.91, 0.45),
+     (1.24, 0.14)],
 ]
 
 DENSITY = [

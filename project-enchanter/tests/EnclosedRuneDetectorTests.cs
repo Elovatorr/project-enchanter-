@@ -218,11 +218,11 @@ public class EnclosedRuneDetectorTests
     }
 
     [Fact]
-    public void Find_WaterTemplateLoops_AreNotTreatedAsEnclosingCircles()
+    public void Find_WaterTemplate_IsNotDetectedAsCircles()
     {
-        // The water rune's two foot loops are drawn as part of their leg strokes.
-        // If they were separate closed strokes they would be mistaken for
-        // rune-enclosing circles, so a bare water rune could never be identified.
+        // A rune must not contain standalone circle-like strokes, otherwise a
+        // bare drawing would report "no rune inside N circle(s)" and circled
+        // drawings would drop those strokes from the region.
         Assert.Equal(0, EnclosedRuneDetector.CountCircles(RuneTemplates.Water.Strokes));
         Assert.Empty(EnclosedRuneDetector.Find(RuneTemplates.Water.Strokes));
     }

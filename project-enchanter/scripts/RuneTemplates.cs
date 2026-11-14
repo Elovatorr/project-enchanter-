@@ -28,70 +28,39 @@ public static class RuneTemplates
         });
 
     /// <summary>
-    /// "Water": a tall pointed arch whose two legs curl into a loop at each
-    /// foot, crossed by a horizontal bar and with a short notch under the apex.
-    /// Each loop is part of its leg's stroke, so it is never mistaken for a
-    /// rune-enclosing circle.
+    /// "Water": two stacked waves. Each stroke climbs to a sharp peak, dips
+    /// through a trough and then rises to end high on the right; the second
+    /// wave sits below and slightly to the right of the first.
     /// </summary>
     public static RuneTemplate Water { get; } = new(
         "water",
         new Vector2[]
         {
-            new(-0.06f, -0.99f),
-            new(-0.13f, -0.94f),
-            new(-0.20f, -0.83f),
-            new(-0.27f, -0.66f),
-            new(-0.33f, -0.45f),
-            new(-0.38f, -0.20f),
-            new(-0.41f,  0.05f),
-            new(-0.43f,  0.25f),
-            new(-0.44f,  0.42f),
-            new(-0.60f,  0.48f),
-            new(-0.65f,  0.62f),
-            new(-0.63f,  0.77f),
-            new(-0.52f,  0.86f),
-            new(-0.38f,  0.88f),
-            new(-0.27f,  0.80f),
-            new(-0.24f,  0.66f),
-            new(-0.31f,  0.52f),
-            new(-0.40f,  0.44f),
-            new(-0.44f,  0.42f),
+            new(-1.24f,  0.03f),
+            new(-0.99f, -0.43f),
+            new(-0.74f, -0.89f),
+            new(-0.65f, -0.96f),
+            new(-0.48f, -0.68f),
+            new(-0.15f, -0.30f),
+            new( 0.19f, -0.05f),
+            new( 0.32f, -0.02f),
+            new( 0.53f, -0.26f),
+            new( 0.78f, -0.60f),
+            new( 1.05f, -0.90f),
         },
         new Vector2[]
         {
-            new( 0.04f, -0.98f),
-            new( 0.11f, -0.91f),
-            new( 0.17f, -0.78f),
-            new( 0.22f, -0.60f),
-            new( 0.26f, -0.38f),
-            new( 0.28f, -0.15f),
-            new( 0.28f,  0.08f),
-            new( 0.27f,  0.26f),
-            new( 0.28f,  0.36f),
-            new( 0.18f,  0.46f),
-            new( 0.13f,  0.60f),
-            new( 0.17f,  0.74f),
-            new( 0.28f,  0.83f),
-            new( 0.42f,  0.85f),
-            new( 0.55f,  0.80f),
-            new( 0.63f,  0.67f),
-            new( 0.63f,  0.53f),
-            new( 0.53f,  0.41f),
-            new( 0.40f,  0.34f),
-            new( 0.30f,  0.34f),
-            new( 0.28f,  0.36f),
-        },
-        new Vector2[]
-        {
-            new(-0.52f, -0.05f),
-            new(-0.02f, -0.10f),
-            new( 0.52f, -0.08f),
-        },
-        new Vector2[]
-        {
-            new( 0.00f, -0.88f),
-            new(-0.02f, -0.70f),
-            new(-0.03f, -0.52f),
+            new(-1.09f,  0.96f),
+            new(-0.95f,  0.62f),
+            new(-0.74f,  0.16f),
+            new(-0.63f, -0.05f),
+            new(-0.44f,  0.24f),
+            new(-0.11f,  0.58f),
+            new( 0.21f,  0.85f),
+            new( 0.38f,  0.96f),
+            new( 0.61f,  0.75f),
+            new( 0.91f,  0.45f),
+            new( 1.24f,  0.14f),
         });
 
     /// <summary>
