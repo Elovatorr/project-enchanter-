@@ -107,6 +107,8 @@ public partial class RoomSelfTest : Node
         Check("wand-no-prompt", wand.InteractionPrompt.Length == 0, wand.InteractionPrompt);
 
         // ---- Shooting via the real left-click pipeline ----
+        Camera3D camera = player.GetNode<Camera3D>("Camera3D");
+        Vector3 aim = -camera.GlobalTransform.Basis.Z;
         int projectilesBefore = Projectiles().Count;
         ClickAt(new Vector2(600f, 400f)); // a click anywhere fires the held wand
         await WaitFrames(2);
@@ -120,10 +122,13 @@ public partial class RoomSelfTest : Node
             Check("fire-shot-is-red",
                 (shotMesh.MaterialOverride as StandardMaterial3D)?.AlbedoColor == WandShotFactory.ColorFor("fire"),
                 (shotMesh.MaterialOverride as StandardMaterial3D)?.AlbedoColor.ToString() ?? "null");
+            Check("fire-shot-travels-forward", fireball.Direction.Dot(aim) > 0.99f,
+                $"dot={fireball.Direction.Dot(aim):0.000}");
             Vector3 spawnedAt = fireball.GlobalPosition;
             await WaitFrames(30);
-            Check("fire-shot-moves-forward", fireball.GlobalPosition.DistanceTo(spawnedAt) > 0.5f,
-                $"moved {fireball.GlobalPosition.DistanceTo(spawnedAt):0.0} m");
+            Vector3 moved = fireball.GlobalPosition - spawnedAt;
+            Check("fire-shot-moves-forward", moved.Length() > 0.5f && moved.Normalized().Dot(aim) > 0.99f,
+                $"moved {moved.Length():0.0} m, dot={moved.Normalized().Dot(aim):0.000}");
         }
 
         // Water: three blue jets (the fireball from the previous shot is still alive).
@@ -136,6 +141,8 @@ public partial class RoomSelfTest : Node
         Check("water-shots-are-blue", waterShots.All(n =>
             ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
             && m.AlbedoColor == WandShotFactory.ColorFor("water")));
+        Check("water-jets-arc-upward", waterShots.All(n => ((Projectile)n).Direction.Y > 0f));
+        Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(aim) > 0.8f));
 
         // Density: three green cones.
         int beforeDensity = Projectiles().Count;
@@ -149,6 +156,7 @@ public partial class RoomSelfTest : Node
         Check("density-shots-are-green", densityShots.All(n =>
             ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
             && m.AlbedoColor == WandShotFactory.ColorFor("density")));
+        Check("density-shots-fly-forward", densityShots.All(n => ((Projectile)n).Direction.Dot(aim) > 0.8f));
 
         // All projectiles free themselves once their lifetime elapses.
         await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);

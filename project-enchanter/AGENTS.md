@@ -138,7 +138,7 @@ dotnet build
 # run res://tests/room_self_test.tscn (or via the godot MCP run_project)
 ```
 
-It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera. The shooting checks fire through the real left-click pipeline: fire spawns one red sphere that moves and despawns after its lifetime; water spawns three blue droplets; density spawns three green cones (`GetNodesInGroup("projectile")` is the counter).
+It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera. The shooting checks fire through the real left-click pipeline: fire spawns one red sphere whose direction and displacement align with the camera forward (dot > 0.99); water spawns three blue droplets that arc upward and fly forward; density spawns three green cones flying forward; all despawn after their lifetime (`GetNodesInGroup("projectile")` is the counter — use deltas since earlier shots stay alive).
 
 ## Commands
 

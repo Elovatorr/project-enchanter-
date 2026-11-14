@@ -13,7 +13,7 @@ public partial class Projectile : Node3D
     private float _lifetime;
     private float _age;
 
-    /// < seconds elapsed since launch (tests observe movement via this). </summary>
+    /// <summary>Seconds elapsed since launch.</summary>
     public float Age => _age;
 
     public Vector3 Direction => _direction;
@@ -28,7 +28,8 @@ public partial class Projectile : Node3D
             _lifetime = shot.Lifetime,
         };
         parent.AddChild(projectile);
-        projectile.Position = position;
+        // Global, not local: the parent may be a scene root away from the origin.
+        projectile.GlobalPosition = position;
         projectile.LookAt(position + projectile._direction, Vector3.Up); // -Z faces the shot direction
         projectile.AddToGroup("projectile");
 
@@ -67,7 +68,7 @@ public partial class Projectile : Node3D
     public override void _PhysicsProcess(double delta)
     {
         _age += (float)delta;
-        TranslateObjectLocal(_direction * _speed * (float)delta);
+        GlobalPosition += _direction * _speed * (float)delta;
         if (_age >= _lifetime) QueueFree();
     }
 }
