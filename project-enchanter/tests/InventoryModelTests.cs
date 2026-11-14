@@ -4,8 +4,8 @@ using Xunit;
 namespace ProjectEnchanter.Tests;
 
 /// <summary>
-/// Unit tests for InventoryModel — item list and selection rules used by the
-/// Tab inventory UI.
+/// Unit tests for InventoryModel — item list and selection rules used for
+/// Numpad 1 item cycling.
 /// </summary>
 public class InventoryModelTests
 {

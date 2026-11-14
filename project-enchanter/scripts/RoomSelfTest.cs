@@ -8,9 +8,9 @@ namespace ProjectEnchanter;
 
 /// <summary>
 /// In-engine test for the room + inventory + enchanting flow:
-///   Tab opens the inventory → Hold equips the wand → the Enchant tab opens the
-///   drawing UI → drawing a rune enchants the wand → the inventory reopens and
-///   controls resume → the held wand shoots.
+///   the first wand is auto-equipped → Numpad 1 cycles items → Tab opens the
+///   drawing UI for the held wand → drawing a rune enchants it → controls resume
+///   and the wand shoots from the hand.
 /// Run with: godot --path . res://tests/room_self_test.tscn
 /// </summary>
 public partial class RoomSelfTest : Node
@@ -44,44 +44,30 @@ public partial class RoomSelfTest : Node
         await WaitFrames(12);
 
         var player = room.GetNode<PlayerController>("Player");
-        var wand = room.GetNode<Wand>("Wand");
+        // The inventory equips the wand on the first frame (reparenting it to the
+        // camera), so resolve it via its group instead of a fixed scene path.
+        var wand = GetTree().GetFirstNodeInGroup("wand") as Wand
+                   ?? throw new InvalidOperationException("wand not found in the room");
         var ui = room.GetNode<EnchantingUI>("EnchantingUI");
-        var inventory = room.GetNode<InventoryUI>("InventoryUI");
+        var inventory = room.GetNode<InventoryController>("Inventory");
         Camera3D camera = player.GetNode<Camera3D>("Camera3D");
 
         Check("hud-exists", GetTree().GetFirstNodeInGroup("hud") is Hud);
-        Check("inventory-hidden-at-start", !inventory.IsOpen);
-        Check("wand-starts-stored", !wand.Held && !wand.Enchanted && !wand.Visible && wand.Stored);
         Check("drawing-ui-hidden-at-start", ui.Drawing is not null && !ui.Drawing.IsUiVisible);
+        Check("wand-held-at-start", wand.Held && wand.GetParent() == camera && wand.Visible);
+        Check("inventory-tracks-wand", inventory.ItemCount == 1 && inventory.SelectedWand == wand,
+            $"items={inventory.ItemCount}");
 
-        // Tab opens the inventory through the real input pipeline.
+        // Numpad 1 cycles items; with a single wand it stays equipped.
+        PressNumpad1();
+        await WaitFrames(2);
+        Check("numpad1-cycles-items",
+            inventory.SelectedWand == wand && wand.Held && wand.GetParent() == camera);
+
+        // Tab opens the enchanting overlay directly for the held wand.
         PressTab();
         await WaitFrames(3);
-        Check("tab-opens-inventory", inventory.IsOpen);
-        Check("inventory-pauses-controls", !player.ControlsEnabled);
-        Check("inventory-lists-wand", inventory.ItemCount == 1, $"items={inventory.ItemCount}");
-        Check("inventory-selects-wand", inventory.SelectedWand == wand);
-        Check("items-tab-default", inventory.ActiveTab == 0, $"tab={inventory.ActiveTab}");
-
-        // "Hold in hand" equips the wand (real button click).
-        Rect2 holdButton = inventory.HoldButtonRect;
-        Check("hold-button-visible", holdButton.Size.X > 0f && holdButton.Size.Y > 0f, $"{holdButton}");
-        ClickAt(holdButton.GetCenter());
-        await WaitFrames(3);
-        Check("hold-equips-wand", wand.Held && wand.GetParent() == camera);
-        Check("held-wand-visible", wand.Visible);
-
-        // Enchant tab → "Open enchanting" → drawing overlay.
-        Rect2 enchantTab = inventory.TabButtonRect(1);
-        Check("enchant-tab-visible", enchantTab.Size.X > 0f && enchantTab.Size.Y > 0f, $"{enchantTab}");
-        ClickAt(enchantTab.GetCenter());
-        await WaitFrames(2);
-        Check("enchant-tab-selected", inventory.ActiveTab == 1);
-        Rect2 enchantButton = inventory.EnchantButtonRect;
-        Check("enchant-button-visible", enchantButton.Size.X > 0f && enchantButton.Size.Y > 0f, $"{enchantButton}");
-        ClickAt(enchantButton.GetCenter());
-        await WaitFrames(3);
-        Check("enchanting-ui-opens", ui.Visible && !inventory.IsOpen);
+        Check("tab-opens-enchanting", ui.Visible);
         Check("enchanting-pauses-controls", !player.ControlsEnabled);
         Check("enchanting-closeup", wand.InCloseUp && wand.GetParent() == camera);
         Check("enchanting-wand-enlarged", wand.Scale.X > 1.2f, $"scale={wand.Scale.X:0.00}");
@@ -90,7 +76,7 @@ public partial class RoomSelfTest : Node
         // Tab must be ignored while the enchanting overlay is up.
         PressTab();
         await WaitFrames(2);
-        Check("tab-ignored-while-enchanting", !inventory.IsOpen && ui.Visible);
+        Check("tab-ignored-while-enchanting", ui.Visible && wand.InCloseUp);
 
         // Mouse input must reach the drawing surface through the overlay (the
         // dim background must not swallow events).
@@ -118,18 +104,15 @@ public partial class RoomSelfTest : Node
         Check("wand-enchanted", wand.Enchanted, $"element='{wand.Element}'");
         Check("wand-element-fire", wand.Element == "fire", wand.Element);
         Check("enchanting-ui-closes", !ui.Visible);
-        Check("inventory-reopens-after-enchant", inventory.IsOpen);
-        Check("inventory-still-paused", !player.ControlsEnabled);
+        Check("controls-resume", player.ControlsEnabled);
         Check("wand-returns-to-hand", wand.Held && !wand.InCloseUp && wand.GetParent() == camera);
         MeshInstance3D decal = wand.GetNode<MeshInstance3D>("RuneDecal");
         Check("rune-decal-visible", decal.Visible);
         Check("rune-decal-has-texture",
             (decal.MaterialOverride as StandardMaterial3D)?.AlbedoTexture is not null);
 
-        // Editing: reopen the enchant tab and cancel keeps the rune.
-        ClickAt(inventory.TabButtonRect(1).GetCenter());
-        await WaitFrames(2);
-        ClickAt(inventory.EnchantButtonRect.GetCenter());
+        // Editing: Tab reopens the overlay prefilled with the held wand's rune.
+        PressTab();
         await WaitFrames(3);
         Check("edit-ui-opens", ui.Visible && wand.InCloseUp);
         Check("edit-canvas-prefilled",
@@ -138,12 +121,8 @@ public partial class RoomSelfTest : Node
         ui.Cancel();
         await WaitFrames(3);
         Check("edit-cancel-keeps-enchantment", wand.Element == "fire" && wand.Held, wand.Element);
-        Check("edit-cancel-reopens-inventory", inventory.IsOpen && !ui.Visible);
-
-        // Close the inventory: controls resume.
-        PressTab();
-        await WaitFrames(2);
-        Check("tab-closes-inventory", !inventory.IsOpen && player.ControlsEnabled && !ui.Visible);
+        Check("edit-cancel-resumes-controls", player.ControlsEnabled && !ui.Visible);
+        Check("edit-cancel-returns-to-hand", wand.GetParent() == camera && !wand.InCloseUp);
 
         // ---- Shooting via the real left-click pipeline ----
         Vector3 aim = -camera.GlobalTransform.Basis.Z;
@@ -234,12 +213,8 @@ public partial class RoomSelfTest : Node
         await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);
         Check("shots-despawn-after-lifetime", Projectiles().Count == 0, $"projectiles={Projectiles().Count}");
 
-        // ---- Re-enchant from the inventory while still holding the wand ----
+        // ---- Re-enchant the held wand directly with Tab ----
         PressTab();
-        await WaitFrames(2);
-        ClickAt(inventory.TabButtonRect(1).GetCenter());
-        await WaitFrames(2);
-        ClickAt(inventory.EnchantButtonRect.GetCenter());
         await WaitFrames(3);
         Check("edit-again-ui-opens", ui.Visible && wand.InCloseUp);
         ui.Drawing!.LoadStrokes(ScaledTemplate(RuneTemplates.Water, 90f, new Vector2(560f, 360f)));
@@ -249,13 +224,9 @@ public partial class RoomSelfTest : Node
         Check("edit-applies-new-element", wand.Element == "water", wand.Element);
         Check("edit-closes-and-returns-to-hand",
             !ui.Visible && !wand.InCloseUp && wand.Held && wand.GetParent() == camera);
-        Check("edit-reopens-inventory", inventory.IsOpen);
         Check("edit-keeps-new-strokes", wand.CurrentStrokes.Count == RuneTemplates.Water.Strokes.Count,
             $"strokes={wand.CurrentStrokes.Count}");
-
-        PressTab();
-        await WaitFrames(2);
-        Check("inventory-closes-cleanly", !inventory.IsOpen && player.ControlsEnabled && !ui.Visible);
+        Check("edit-resumes-controls", player.ControlsEnabled);
 
         GD.Print($"ROOMSELFTEST SUMMARY: passed={_passed} failed={_failed}");
         await WaitFrames(2);
@@ -302,6 +273,23 @@ public partial class RoomSelfTest : Node
         {
             Keycode = Key.Tab,
             PhysicalKeycode = Key.Tab,
+            Pressed = false,
+        });
+    }
+
+    /// <summary>Presses and releases Numpad 1 through the real input pipeline.</summary>
+    private static void PressNumpad1()
+    {
+        Input.ParseInputEvent(new InputEventKey
+        {
+            Keycode = Key.Kp1,
+            PhysicalKeycode = Key.Kp1,
+            Pressed = true,
+        });
+        Input.ParseInputEvent(new InputEventKey
+        {
+            Keycode = Key.Kp1,
+            PhysicalKeycode = Key.Kp1,
             Pressed = false,
         });
     }

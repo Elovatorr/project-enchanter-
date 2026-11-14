@@ -9,9 +9,10 @@ templates or hard-coded shapes at runtime.
 
 - **First-person 3D room** — floor, walls and lighting, with WASD movement, sprint, jump,
   gravity, and mouse look.
-- **Tab inventory** — press **Tab** to open a tabbed inventory of carried items (wands):
-  hold one in your hand or put it away, and switch to the **Enchant** tab to open the
-  drawing overlay for the selected wand.
+- **Item cycling** — your wands live in an inventory; **Numpad 1** cycles which one you
+  hold. The held wand is visible in your hand and can be fired.
+- **Tab to enchant** — press **Tab** to open the enchanting overlay directly for the item
+  currently held, with its existing rune loaded so it can be edited in place.
 - **Editable enchantments** — the current rune is loaded onto the canvas so you can undo
   strokes, redraw part of it, and identify again to change the element. Cancel leaves the
   enchantment untouched.
@@ -36,7 +37,8 @@ templates or hard-coded shapes at runtime.
 | W A S D | Move |
 | Shift | Sprint |
 | Space | Jump |
-| Tab | Open / close the inventory |
+| Tab | Open the enchanting overlay for the item currently held |
+| Numpad 1 | Cycle to the next held item |
 | Left click | Shoot the wand's element effect while holding an enchanted wand (hold for a continuous water jet) |
 | Esc | Release / capture the mouse |
 | Left drag | Draw (during enchanting) |
@@ -78,8 +80,8 @@ project-enchanter/
 │   ├── PlayerController.cs     FPS movement, mouse look, interaction raycast, left-click fire
 │   ├── Hud.cs                  Reticle, interaction prompt, control hints
 │   ├── IInteractable.cs        Look-at interaction interface
-│   ├── InventoryUI.cs          Tab inventory: items tab, enchant tab, hold/put away
-│   ├── InventoryModel.cs       Pure item-selection logic
+│   ├── InventoryController.cs  Numpad 1 item cycling; Tab opens enchanting for held item
+│   ├── InventoryModel.cs       Pure item selection/cycling logic
 │   ├── Wand.cs                 Stored/held wand, close-up pose, decal, Shoot()
 │   ├── WandShotFactory.cs      Element → shot descriptors (fireball / jet / cones)
 │   ├── Projectile.cs           Moving projectile node; frees itself after its lifetime

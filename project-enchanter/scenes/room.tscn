@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/Wand.cs" id="3_wand"]
 [ext_resource type="Script" path="res://scripts/Hud.cs" id="4_hud"]
 [ext_resource type="Script" path="res://scripts/EnchantingUI.cs" id="5_ui"]
-[ext_resource type="Script" path="res://scripts/InventoryUI.cs" id="6_inventory"]
+[ext_resource type="Script" path="res://scripts/InventoryController.cs" id="6_inventory"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
 size = Vector2(20, 14)
@@ -135,5 +135,5 @@ script = ExtResource("4_hud")
 [node name="EnchantingUI" type="CanvasLayer" parent="."]
 script = ExtResource("5_ui")
 
-[node name="InventoryUI" type="CanvasLayer" parent="."]
+[node name="Inventory" type="Node" parent="."]
 script = ExtResource("6_inventory")
