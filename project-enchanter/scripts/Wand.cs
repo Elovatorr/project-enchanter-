@@ -4,16 +4,19 @@ using System.Collections.Generic;
 namespace ProjectEnchanter;
 
 /// <summary>
-/// A wand: a small rectangular prism lying on the enchanting table. While being
-/// enchanted it is shown up close in front of the camera; a successful cast
-/// engraves the drawn rune onto its top face and tints it with the element
-/// colour. Once enchanted it can be picked up (E) into the player's hand.
+/// A wand the player carries in the inventory. It starts stored (hidden), can
+/// be equipped into the player's hand, and is shown up close while being
+/// enchanted; a successful cast engraves the drawn rune onto its top face and
+/// tints it with the element colour.
 /// </summary>
 public partial class Wand : StaticBody3D, IInteractable
 {
     public string Element { get; private set; } = "";
     public bool Enchanted => Element.Length > 0;
     public bool Held { get; private set; }
+
+    /// <summary>True when the wand is neither held nor in the enchanting close-up.</summary>
+    public bool Stored => !Held && !InCloseUp;
 
     /// <summary>The strokes of the rune currently etched on the wand (for editing).</summary>
     public IReadOnlyList<IReadOnlyList<Vector2>> CurrentStrokes { get; private set; } = [];
@@ -27,6 +30,10 @@ public partial class Wand : StaticBody3D, IInteractable
 
     private Node? _restoreParent;
     private Transform3D _restoreTransform;
+    private bool _restoreVisible = true;
+
+    private Node? _homeParent;
+    private Transform3D _homeTransform;
 
     public override void _Ready()
     {
@@ -35,31 +42,57 @@ public partial class Wand : StaticBody3D, IInteractable
         _collision = GetNode<CollisionShape3D>("Collision");
         _decal = GetNode<MeshInstance3D>("RuneDecal");
         _decal.Visible = false;
+
+        // The wand lives in the inventory: hidden until equipped or enchanted.
+        _homeParent = GetParent();
+        _homeTransform = GlobalTransform;
+        Visible = false;
+        _collision.Disabled = true;
     }
 
     public string InteractionPrompt => Held || InCloseUp
         ? ""
         : Enchanted
-            ? "[E] Pick up wand"
-            : "Enchant this wand at the table";
+            ? "[E] Hold wand"
+            : "Enchant this wand from the inventory";
 
-    public void Interact(PlayerController player)
+    public void Interact(PlayerController player) => Equip(player);
+
+    /// <summary>Puts the wand into the player's hand (inventory "Hold" action).</summary>
+    public void Equip(PlayerController player)
     {
-        if (!Enchanted || Held || InCloseUp) return;
+        if (Held || InCloseUp) return;
 
         Camera3D camera = player.GetNode<Camera3D>("Camera3D");
-        Reparent(camera, false);
+        if (GetParent() != camera) Reparent(camera, false);
         Position = new Vector3(0.32f, -0.24f, -0.6f);
         RotationDegrees = new Vector3(0f, 20f, -10f);
+        Scale = Vector3.One;
+        Visible = true;
         _collision.Disabled = true;
         Held = true;
+    }
+
+    /// <summary>Stores the wand back in the inventory (inventory "Put away" action).</summary>
+    public void PutAway()
+    {
+        if (!Held || InCloseUp) return;
+
+        Held = false;
+        if (_homeParent is Node home && IsInsideTree())
+        {
+            if (GetParent() != home) Reparent(home, false);
+            GlobalTransform = _homeTransform;
+        }
+        Visible = false;
+        _collision.Disabled = true;
     }
 
     /// <summary>
     /// Moves the wand in front of the camera, large and with its rune face
     /// towards the viewer, for the enchanting overlay. Works while the wand is
     /// held, so an existing enchantment can be edited; <see cref="EndCloseUp"/>
-    /// restores it to the hand.
+    /// restores it to the hand (or back to storage).
     /// </summary>
     public void ShowCloseUp(Node3D camera)
     {
@@ -68,15 +101,17 @@ public partial class Wand : StaticBody3D, IInteractable
         InCloseUp = true;
         _restoreParent = GetParent();
         _restoreTransform = GlobalTransform;
+        _restoreVisible = Visible;
 
         if (GetParent() != camera) Reparent(camera, false);
         Position = new Vector3(0f, -0.05f, -0.42f);
         RotationDegrees = new Vector3(90f, 0f, 0f); // top face toward the camera
         Scale = new Vector3(1.4f, 1.4f, 1.4f);
+        Visible = true;
         _collision.Disabled = true;
     }
 
-    /// <summary>Returns the wand to where it was before the close-up (table or hand).</summary>
+    /// <summary>Returns the wand to where it was before the close-up (hand or storage).</summary>
     public void EndCloseUp()
     {
         if (!InCloseUp) return;
@@ -88,12 +123,13 @@ public partial class Wand : StaticBody3D, IInteractable
             GlobalTransform = _restoreTransform;
         }
         Scale = Vector3.One;
-        _collision.Disabled = Held;
+        Visible = _restoreVisible;
+        _collision.Disabled = true;
     }
 
     /// <summary>
     /// Fires the wand's element effect straight ahead of the camera (only while
-    /// held): fire = one fireball, water = three water jets, density = three cones.
+    /// held): fire = one fireball, water = a laser-like jet, density = three cones.
     /// </summary>
     public void Shoot(PlayerController player)
     {

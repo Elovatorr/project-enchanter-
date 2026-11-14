@@ -38,7 +38,7 @@ public partial class Hud : CanvasLayer
 
         Label hint = new()
         {
-            Text = "WASD move · Shift sprint · Space jump · E interact · Esc mouse",
+            Text = "WASD move · Shift sprint · Space jump · Tab inventory · Esc mouse",
             Modulate = new Color(1f, 1f, 1f, 0.65f),
         };
         hint.AddThemeFontSizeOverride("font_size", 16);

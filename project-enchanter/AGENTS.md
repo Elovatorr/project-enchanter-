@@ -19,17 +19,18 @@ than no guidance.
 | `project.godot` | Godot project config. `[dotnet] project/assembly_name` **must match** the csproj file name (`project-enchanter`, no spaces) or C# scripts fail to instantiate at runtime. |
 | `project-enchanter.csproj` | Godot.NET.Sdk 4.7.2, net8.0. `tests\**` is excluded from this build. |
 | `main.tscn` | Drawing scene: root `Node2D` "Main" with `DrawingSurface` attached (run with F6). |
-| `scenes/room.tscn` | **Main scene**: first-person 3D room — floor, four walls, sun light, enchanting-table prism, and player. |
+| `scenes/room.tscn` | **Main scene**: first-person 3D room — floor, four walls, sun light, player, wand, HUD, enchanting and inventory overlays. |
 | `scripts/PlayerController.cs` | `CharacterBody3D` first-person controller: WASD/Shift/Space + mouse look, Esc toggles capture, E raycasts interactions. |
 | `scripts/IInteractable.cs` | Interface for look-at interactions (`InteractionPrompt`, `Interact`). |
 | `scripts/Hud.cs` | Reticle, interaction prompt, and control hint (CanvasLayer). |
-| `scripts/EnchantingTable.cs` | Interactable table: opens the enchanting UI for the wand. |
-| `scripts/Wand.cs` | Interactable wand prism: close-up enchanting pose, element colour, etched rune decal, pick-up into the camera. |
+| `scripts/Wand.cs` | Wand in the inventory: stored/equipped state, close-up enchanting pose, element colour, etched rune decal, `Shoot()`. |
+| `scripts/InventoryModel.cs` | Pure C# — inventory item selection (add/select/wrap/remove), unit-testable. |
+| `scripts/InventoryUI.cs` | Tab-toggled inventory overlay: Items tab (hold/put away) and Enchant tab (opens `EnchantingUI` for the selected wand). |
 | `scripts/RuneTextureFactory.cs` | Rasterizes drawn strokes into a transparent texture for the wand's rune decal. |
 | `scripts/WandShotFactory.cs` | Pure C# — maps an enchanted element to shot descriptors (fire fireball, water jets, density cones). |
 | `scripts/Projectile.cs` | `Node3D` shot projectile: travels along its launch direction, frees itself after its lifetime; group `projectile`. |
 | `scripts/EnchantingUI.cs` | Full-screen overlay hosting the drawing scene; reports cast runes + strokes and closes. |
-| `scripts/RoomSelfTest.cs` | In-engine test for the room + enchanting flow (see "Testing in engine"). |
+| `scripts/RoomSelfTest.cs` | In-engine test for the room + inventory + enchanting + shooting flow (see "Testing in engine"). |
 | `tests/room_self_test.tscn` | Scene that runs `RoomSelfTest`. |
 | `scripts/DrawingSurface.cs` | Godot node. Input (event positions), rendering, HUD, Identify button, and per-rune flash overlay; delegates to `DrawingSurfaceModel` + `RuneClassifier`. |
 | `scripts/DrawingSurfaceModel.cs` | Pure C# — drawing/undo logic. No Godot node dependencies; unit-testable. |
@@ -47,6 +48,7 @@ than no guidance.
 | `tests/RuneFeaturesTests.cs` | Feature pipeline tests incl. invariance + Python-trainer parity. |
 | `tests/RuneClassifierTests.cs` | Classifier tests: invariance, hand-drawn tolerance, rejection. |
 | `tests/WandShotFactoryTests.cs` | Shot tests: per-element projectile count/shape/colour, forward direction, rejection of unknown elements. |
+| `tests/InventoryModelTests.cs` | Inventory selection tests: add/select, wrap-around, removal keeps the selection valid. |
 | `tests/recognition_self_test.tscn` | Scene that runs `RecognitionSelfTest` in-engine. |
 | `tools/train_rune_model.py` | Trains the MLP (numpy) and writes `resources/rune_model/*.csv`. |
 
@@ -122,8 +124,8 @@ It draws fire, water and density at various transforms (expect the right rune ca
 
 - **Player** (`CharacterBody3D` + `PlayerController.cs`): spawns at (0, 0.1, 4); capsule 1.8 m, eye height 1.6 m. WASD move, Shift sprint, Space jump, mouse look, Esc toggles mouse capture, **E interacts**. Physical key checks — no input-map actions required.
 - **Interaction**: `PlayerController` raycasts 3 m along the camera forward each physics frame; if the hit node implements `IInteractable`, its `InteractionPrompt` shows in the HUD and E calls `Interact`. Note group lookups (hud/player/wand) must be lazy — node `_Ready` order is not guaranteed.
-- **EnchantingTable**: `StaticBody3D` with a box prism (`BoxMesh` 2.4 × 1 × 1.2) at (2, 0.5, −3), including a matching `BoxShape3D`. Interacting shows the wand up close, opens `EnchantingUI` and pauses player controls. It also works while the wand is **held**: the enchantment is editable — `Open` is passed `Wand.CurrentStrokes` so the canvas starts with the current rune, and the overlay switches to an edit title/hint.
-- **Wand**: small prism (0.06 × 0.06 × 0.55) on the table. While enchanting it is reparented to the camera at ~1.4× scale with its top face toward the viewer (`ShowCloseUp`), and restored afterwards (`EndCloseUp`) — both work while the wand is held, so it returns to the hand after editing. A cast call `Enchant(element, strokes)` tints it, rasterizes the strokes (`RuneTextureFactory`) onto the `RuneDecal` plane and stores them in `CurrentStrokes` (used to prefill the editor). Once enchanted, E picks it up and reparents it to the camera (`Held`).
+- **Inventory** (`InventoryUI.cs` + `InventoryModel.cs`): Tab toggles a CanvasLayer overlay (layer 105) with two tabs. **Items** lists the carried wands (from group `wand`) and a Hold/Put away button (`Wand.Equip`/`Wand.PutAway`). **Enchant** opens `EnchantingUI` for the selected wand, passing `Wand.CurrentStrokes` so the canvas is prefilled; on cast/cancel the wand returns to the hand (or storage) and the inventory reopens. Tab is handled in `_Input` (before GUI focus traversal) and ignored while `EnchantingUI` is visible. Opening pauses player controls and shows the mouse; closing restores both. The old `EnchantingTable` node/script was removed.
+- **Wand**: starts **stored** (hidden, collision off) in the inventory. `Equip(player)` reparents it to the camera at the hand pose; `PutAway()` returns it to its home transform and hides it. While enchanting it is shown close-up at ~1.4× scale with its top face toward the viewer (`ShowCloseUp`), and restored afterwards (`EndCloseUp`) to the hand or storage. A cast call `Enchant(element, strokes)` tints it, rasterizes the strokes (`RuneTextureFactory`) onto the `RuneDecal` plane and stores them in `CurrentStrokes` (used to prefill the editor).
 - **HUD** (`Hud.cs`): centre reticle (two bars), bottom interaction prompt, control hint.
 - **Shooting**: while the wand is `Held`, a left click (`InputEventMouseButton`, `ControlsEnabled` only) calls `Wand.Shoot(player)`, which spawns `Projectile` nodes straight ahead of the camera from `WandShotFactory.For(element)`: fire → one red sphere (fireball), water → a laser-like jet of two concentric long cylinders (a bright ~opaque core with strong emission inside a wider translucent unshaded sheath; both taper toward the tip and travel at 26 m/s), density → three green cones (`CylinderMesh` with `TopRadius = 0`). Projectiles travel along the camera's forward direction (plus the descriptor's camera-space `Boost`) and `QueueFree()` after `Lifetime`; they live in group `projectile`.
 - **Enchanting overlay** (`EnchantingUI.cs`): lightly dimmed background (so the wand preview stays visible) + title/hint/Cancel, hosting `res://main.tscn`. `DrawingSurface` raises `CastCompleted(runes, strokes)`; the overlay closes and invokes `Open`'s callback with both. Cancel invokes the optional `onCancel` (used to restore the wand).
@@ -139,7 +141,7 @@ dotnet build
 # run res://tests/room_self_test.tscn (or via the godot MCP run_project)
 ```
 
-It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera. It then edits the enchantment at the table while the wand is held: the prompt offers editing, the canvas is prefilled with the wand's current strokes, Cancel keeps the enchantment and returns the wand to the hand, and identifying a loaded water rune applies the new element and returns it to the hand. The shooting checks fire through the real left-click pipeline: fire spawns one red sphere whose direction and displacement align with the camera forward (dot > 0.99); water spawns two blue cylinder layers (core + sheath) that fly dead ahead, with the sheath using alpha transparency; density spawns three green cones flying forward; all despawn after their lifetime (`GetNodesInGroup("projectile")` is the counter — use deltas since earlier shots stay alive).
+It instantiates the room and checks the inventory starts closed and the wand stored. It then opens the inventory with a real Tab press, equips the wand via the Hold button, switches to the Enchant tab via a real click and opens the drawing overlay; it draws the demo runes, clicks Identify, and checks the wand becomes fire-enchanted, the overlay closes, the inventory reopens and the wand returns to the hand. Editing is covered too (canvas prefilled, Cancel keeps the element) and so is closing with Tab. The shooting checks fire through the real left-click pipeline: fire spawns one red sphere whose direction and displacement align with the camera forward (dot > 0.99); water spawns two blue cylinder layers (core + sheath) that fly dead ahead, with the sheath using alpha transparency; density spawns three green cones flying forward; all despawn after their lifetime (`GetNodesInGroup("projectile")` is the counter — use deltas since earlier shots stay alive). Finally it re-enchants from the inventory (loaded water rune) and checks the wand returns to the hand.
 
 ## Commands
 
@@ -180,7 +182,8 @@ when something "doesn't work" at runtime.
 | Changed `RuneClassifier` threshold or API | Update the threshold-related tests and the HUD self-test expectations. |
 | Changed `EnclosedRuneDetector` (circle/enclosure geometry) | Update `EnclosedRuneDetectorTests` (circle fit, enclosure, nesting, multi-circle, invariance) and add a self-test case if the on-screen flow changes. |
 | Changed shooting (`WandShotFactory` descriptors, `Projectile`, `Wand.Shoot`, left-click wiring) | Update `WandShotFactoryTests` (per-element count/shape/colour) and the ROOMSELFTEST shot checks; count projectiles as **deltas** — earlier shots stay alive until their lifetime elapses. |
-| Changed the enchant-edit flow (`EnchantingTable.Interact`, `Wand.ShowCloseUp`/`EndCloseUp`, `EnchantingUI.Open`, `DrawingSurface.LoadStrokes`) | Extend `DrawingSurfaceModelTests` for `Load` and the ROOMSELFTEST edit checks (edit prompt, canvas prefill, cancel keeps the enchantment, re-enchant while held returns to the hand). |
+| Changed the enchant-edit flow (`InventoryUI.BeginEnchanting`, `Wand.ShowCloseUp`/`EndCloseUp`, `EnchantingUI.Open`, `DrawingSurface.LoadStrokes`) | Update `DrawingSurfaceModelTests` for `Load` and the ROOMSELFTEST edit checks (canvas prefill, cancel keeps the enchantment, re-enchant while held returns to the hand). |
+| Changed the inventory (`InventoryModel`, `InventoryUI`, `Wand.Equip`/`PutAway`, Tab handling) | Update `InventoryModelTests` and the ROOMSELFTEST inventory checks (Tab toggle, hold/put away, Enchant tab, overlay/inventory hand-off). |
 | Added a rune | See "Retraining and changing runes": trainer `FIRE`/shapes + `OUTPUT_NAMES` + `RuneTemplates.cs` + retrain + classifier tests for the new rune and rejection of the others. |
 | Renamed / deleted a class or method | Update all references in `tests/` in the same change — the build must stay green. |
 | Changed exported tunables (e.g. `MinPointDistance` default) | Update any test that relied on the default and any test names mentioning the value. |

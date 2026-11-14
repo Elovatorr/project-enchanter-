@@ -1,21 +1,20 @@
 # Project Enchanter
 
 A first-person magic game prototype built with **Godot 4.7 (.NET / C#)**. Explore a small
-3D room, walk up to the enchanting table, and **draw runes** to enchant a wand. Runes are
+3D room, open your inventory with **Tab**, and **draw runes** to enchant a wand. Runes are
 recognised by a small neural network trained on synthetic, hand-drawn-style samples — no
 templates or hard-coded shapes at runtime.
 
 ## Features
 
-- **First-person 3D room** — floor, walls, lighting, and an enchanting-table prism, with
-  WASD movement, sprint, jump, gravity, and mouse look.
-- **Look-at interaction** — a centre reticle and prompt appear when you aim at an
-  interactable; press **E** to use it.
-- **Enchanting table** — interacting presents the wand up close, large in view, and opens
-  the drawing overlay.
-- **Editable enchantments** — interact with the table again, even while holding the wand:
-  the current rune is loaded onto the canvas so you can undo strokes, redraw part of it,
-  and identify again to change the element. Cancel leaves the enchantment untouched.
+- **First-person 3D room** — floor, walls and lighting, with WASD movement, sprint, jump,
+  gravity, and mouse look.
+- **Tab inventory** — press **Tab** to open a tabbed inventory of carried items (wands):
+  hold one in your hand or put it away, and switch to the **Enchant** tab to open the
+  drawing overlay for the selected wand.
+- **Editable enchantments** — the current rune is loaded onto the canvas so you can undo
+  strokes, redraw part of it, and identify again to change the element. Cancel leaves the
+  enchantment untouched.
 - **Rune drawing** — freehand drawing on the overlay (the original 2D canvas scene is still
   runnable on its own).
 - **ML rune recognition** — a small MLP classifies `fire`, `water`, `density`, or `unknown`.
@@ -36,7 +35,7 @@ templates or hard-coded shapes at runtime.
 | W A S D | Move |
 | Shift | Sprint |
 | Space | Jump |
-| E | Interact (table, wand) |
+| Tab | Open / close the inventory |
 | Left click | Shoot the wand's element effect (fireball / water jets / green cones) while holding an enchanted wand |
 | Esc | Release / capture the mouse |
 | Left drag | Draw (during enchanting) |
@@ -71,19 +70,20 @@ the main scene. Press **F6** with `main.tscn` open to run the standalone drawing
 ```
 project-enchanter/
 ├── project.godot               Godot project (main scene = scenes/room.tscn)
-├── scenes/room.tscn            3D room: player, table, wand, HUD, enchanting overlay
+├── scenes/room.tscn            3D room: player, wand, HUD, enchanting + inventory UI
 ├── main.tscn                   Standalone drawing-canvas scene
 ├── scripts/
 │   ├── PlayerController.cs     FPS movement, mouse look, interaction raycast, left-click fire
 │   ├── Hud.cs                  Reticle, interaction prompt, control hints
 │   ├── IInteractable.cs        Look-at interaction interface
-│   ├── EnchantingTable.cs      Opens the enchanting overlay for the wand
-│   ├── Wand.cs                 Close-up pose, element colour, rune decal, pick-up, Shoot()
-│   ├── WandShotFactory.cs      Element → shot descriptors (fireball / jets / cones)
+│   ├── InventoryUI.cs          Tab inventory: items tab, enchant tab, hold/put away
+│   ├── InventoryModel.cs       Pure item-selection logic
+│   ├── Wand.cs                 Stored/held wand, close-up pose, decal, Shoot()
+│   ├── WandShotFactory.cs      Element → shot descriptors (fireball / jet / cones)
 │   ├── Projectile.cs           Moving projectile node; frees itself after its lifetime
 │   ├── EnchantingUI.cs         Overlay hosting the drawing scene
 │   ├── DrawingSurface.cs       Drawing input/render, HUD, cast signal, flash
-│   ├── DrawingSurfaceModel.cs  Pure drawing/undo logic
+│   ├── DrawingSurfaceModel.cs  Pure drawing/undo/load logic
 │   ├── RuneFeatures.cs         Drawing → invariant feature vector
 │   ├── RuneModel.cs            MLP forward pass
 │   ├── RuneClassifier.cs       Classification API + cast threshold
@@ -91,7 +91,7 @@ project-enchanter/
 │   ├── RuneTextureFactory.cs   Strokes → texture for the wand decal
 │   ├── EnclosedRuneDetector.cs Circle detection and rune grouping
 │   ├── RuneTemplates.cs        Reference rune shapes (fire, water, density)
-│   └── RoomSelfTest.cs         In-engine room/enchanting test
+│   └── RoomSelfTest.cs         In-engine room/inventory/enchanting test
 ├── resources/rune_model/       Trained weights as plain CSV (embedded at build)
 ├── tests/                      xUnit tests + in-engine test scenes
 └── tools/train_rune_model.py   Trains the model (numpy) and writes the CSVs
@@ -133,7 +133,7 @@ dotnet test tests/project-enchanter.tests.csproj
 
 # in-engine suites (build first!)
 #   res://tests/recognition_self_test.tscn  - rune recognition and drawing HUD
-#   res://tests/room_self_test.tscn         - room, interaction, enchanting, wand, shooting
+#   res://tests/room_self_test.tscn         - inventory, enchanting, wand, shooting
 ```
 
 Run the scenes from the Godot editor (F6) or via an MCP/automation tool, and read the
