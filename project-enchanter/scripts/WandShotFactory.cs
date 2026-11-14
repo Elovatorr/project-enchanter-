@@ -74,7 +74,7 @@ public static class WandShotFactory
                 Color = ColorFor(element),
                 Size = 0.12f,
                 Boost = Vector3.Zero,
-                Speed = 9f,
+                Speed = 30f,
                 Lifetime = 2.5f,
             },
         },
@@ -92,7 +92,7 @@ public static class WandShotFactory
                 EmissionStrength = 1.8f,
                 ShaderPath = WaterShaderPath,
                 Boost = Vector3.Zero,
-                Speed = 26f,
+                Speed = 50f,
                 Lifetime = 0.5f,
             },
             new ShotDescriptor

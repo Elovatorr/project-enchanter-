@@ -16,8 +16,11 @@ public partial class PlayerController : CharacterBody3D
     [Export] public float Gravity { get; set; } = 9.8f;
     [Export] public float InteractRange { get; set; } = 3f;
 
-    /// <summary>Seconds between shots while holding the button with a water wand.</summary>
-    [Export] public float WaterFireInterval { get; set; } = 0.09f;
+    /// <summary>
+    /// Seconds between shots while holding the button with a water wand.
+    /// 0.0225 s ≈ 44 shots/s — four times the original 0.09 s rate.
+    /// </summary>
+    [Export] public float WaterFireInterval { get; set; } = 0.0225f;
 
     private Camera3D _camera = null!;
     private float _pitch;
@@ -86,7 +89,7 @@ public partial class PlayerController : CharacterBody3D
             if (click.Pressed)
             {
                 // Fire immediately; continuous elements keep firing while held.
-                _continuousCooldown = WaterFireInterval;
+                _continuousCooldown = Mathf.Max(WaterFireInterval, 0.005f);
                 Wand? wand = WandRef;
                 if (wand is not null && wand.Held) wand.Shoot(this);
             }
@@ -134,7 +137,9 @@ public partial class PlayerController : CharacterBody3D
 
     /// <summary>
     /// Fires repeatedly while the left button is held and the equipped wand is a
-    /// continuous element (water). Fire/density stay one shot per click.
+    /// continuous element (water). Fire/density stay one shot per click. The
+    /// cooldown carries over between frames so the average rate is independent
+    /// of the physics tick rate.
     /// </summary>
     private void HandleContinuousFire(float dt)
     {
@@ -144,11 +149,13 @@ public partial class PlayerController : CharacterBody3D
             return;
         }
 
+        float interval = Mathf.Max(WaterFireInterval, 0.005f);
         _continuousCooldown -= dt;
-        if (_continuousCooldown > 0f) return;
-
-        wand.Shoot(this);
-        _continuousCooldown = WaterFireInterval;
+        while (_continuousCooldown <= 0f)
+        {
+            wand.Shoot(this);
+            _continuousCooldown += interval;
+        }
     }
 
     /// <summary>Updates the HUD prompt based on what the reticle is aimed at.</summary>

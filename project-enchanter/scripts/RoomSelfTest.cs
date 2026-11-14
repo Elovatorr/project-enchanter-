@@ -178,7 +178,7 @@ public partial class RoomSelfTest : Node
         SendLeftButton(false);
         await WaitFrames(2);
         int heldShots = wand.ShotsFired - shotsBeforeHold;
-        Check("water-hold-fires-continuously", heldShots >= 4, $"shots={heldShots}");
+        Check("water-hold-fires-fast", heldShots >= 18, $"shots={heldShots} (expect ~26 in 0.6 s)");
         int shotsAtRelease = wand.ShotsFired;
         await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
         Check("water-release-stops-firing", wand.ShotsFired == shotsAtRelease,
