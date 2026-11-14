@@ -40,7 +40,7 @@ than no guidance.
 | `resources/rune_model/` | Trained weights as plain CSV (w1, b1, w2, b2, feature_mean/std, meta, parity). Embedded into the assembly; `.gdignore`d for Godot. |
 | `scripts/EnclosedRuneDetector.cs` | Pure C# — finds circle strokes and groups the runes drawn inside them (multi-rune drawings). |
 | `scripts/RuneTemplate.cs` | Pure C# record: a named rune and its reference strokes. |
-| `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test: `Fire` (caret), `Water` (two waves), `Density` (zigzag + bar + V). |
+| `scripts/RuneTemplates.cs` | Reference rune shapes used for training data and the in-engine self-test: `Fire` (caret), `Water` (pointed arch with two foot loops, crossbar, apex notch), `Density` (zigzag + bar + V). |
 | `scripts/RecognitionSelfTest.cs` | In-engine automated test driver, run as a scene (see "Testing in engine"). |
 | `tests/project-enchanter.tests.csproj` | xUnit test project (net8.0). |
 | `tests/DrawingSurfaceModelTests.cs` | Unit/regression tests for the drawing model. |
@@ -78,7 +78,7 @@ weights compiled in). Pipeline:
 8. **Identification is manual** — strokes are not classified automatically. The player presses the on-screen **Identify rune** button, which calls `DrawingSurface.Identify()`: circled runes are classified individually; with no circles, the whole drawing is classified as a single rune. A **Draw demo (3 runes)** button (`DrawDemoRunes()`) fills the canvas with circled fire, water and density side by side.
 9. **Feedback** — a cast flashes a full-screen overlay for `FlashDuration` (0.5 s) when confidence exceeds `FlashThreshold` (0.7). The colour is per-rune (`FireFlashColor` red, `WaterFlashColor` blue, `DensityFlashColor` green, `DefaultFlashColor` fallback); multiple runes flash their colours in sequence. All are `[Export]` tunables on `DrawingSurface`; add new runes' colours in `FlashColorFor()`.
 
-Runes: **fire** (one-stroke caret), **water** (two parallel waves), **density** (zigzag + horizontal bar + lower V). Current model: held-out accuracy ≈ 99.8%, with fire 99.6%, water 100%, density 100%, unknown 99.7%.
+Runes: **fire** (one-stroke caret), **water** (tall pointed arch whose legs end in a loop at each foot, crossed by a bar, with a short notch under the apex), **density** (zigzag + horizontal bar + lower V). Current model: held-out accuracy ≈ 99.8%, with fire 99.5%, water 100%, density 99.9%, unknown 99.8%.
 
 ### Retraining and changing runes
 
@@ -100,6 +100,7 @@ Gotchas learned the hard way (do not regress these):
 - Features must be standardized before the MLP; unstandardized structural features dominate training.
 - Synthetic "scribbles" must be realistic (continuous wandering strokes, spirals, waves) — spiky random jumps are not representative and poison the unknown class.
 - **UI visibility**: use a plain `Control` (not a nested `CanvasLayer`) for the drawing surface's buttons/flash — a nested CanvasLayer does not hide with its parent, so its buttons stay active outside enchanting.
+- **Circular rune parts**: keep a rune's closed loops in the *same stroke* as a longer line (water's foot loops are the tails of its leg strokes). A standalone closed stroke is treated by `EnclosedRuneDetector` as a rune-enclosing circle — a bare water rune would report "no rune inside 2 circle(s)", and when circled the loops would be dropped from the region's strokes. `EnclosedRuneDetectorTests.Find_WaterTemplateLoops_AreNotTreatedAsEnclosingCircles` guards this.
 - **Input layering**: full-screen overlay backgrounds must use `MouseFilter = Ignore`; `Stop` swallows mouse events before `_UnhandledInput`, which makes drawing impossible. Position UI with `SetAnchorsAndOffsetsPreset`. A `Control` whose parent is a `Node2D` gets **no** viewport-sized rect (`SetAnchorsPreset(FullRect)` alone leaves it 0×0, putting children at negative coordinates and breaking buttons) — give it an explicit `Size = GetViewportRect().Size` and update it on `Viewport.SizeChanged`.
 
 ## Testing in engine

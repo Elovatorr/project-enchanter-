@@ -208,7 +208,7 @@ public class RuneClassifierTests
     [Fact]
     public void Recognize_SingleWave_DoesNotCastWater()
     {
-        // Water has two waves; a single wavy line is not the rune.
+        // A single wavy line is not the full water rune (arch + feet loops + bar).
         List<Vector2> wave = [];
         for (int i = 0; i <= 30; i++)
         {

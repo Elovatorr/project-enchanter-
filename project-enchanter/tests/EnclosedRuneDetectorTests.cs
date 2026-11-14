@@ -142,15 +142,17 @@ public class EnclosedRuneDetectorTests
             Circle(new Vector2(200, 200), 120f),
             ScaledShape(RuneTemplates.Fire.Strokes[0], 50f, new Vector2(200, 200)),
             Circle(new Vector2(600, 200), 120f),
-            ScaledShape(RuneTemplates.Water.Strokes[0], 50f, new Vector2(600, 200)),
-            ScaledShape(RuneTemplates.Water.Strokes[1], 50f, new Vector2(600, 200)),
         ];
+        foreach (IReadOnlyList<Vector2> waterStroke in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(ScaledShape(waterStroke, 50f, new Vector2(600, 200)));
+        }
 
         List<EnclosedRune> regions = EnclosedRuneDetector.Find(strokes);
 
         Assert.Equal(2, regions.Count);
         Assert.Single(regions[0].Strokes);
-        Assert.Equal(2, regions[1].Strokes.Count);
+        Assert.Equal(RuneTemplates.Water.Strokes.Count, regions[1].Strokes.Count);
     }
 
     [Fact]
@@ -200,9 +202,11 @@ public class EnclosedRuneDetectorTests
             ScaledShape(RuneTemplates.Fire.Strokes[0], 55f, new Vector2(300, 300)),
             // circle + water
             Circle(new Vector2(800, 300), 140f),
-            ScaledShape(RuneTemplates.Water.Strokes[0], 55f, new Vector2(800, 300)),
-            ScaledShape(RuneTemplates.Water.Strokes[1], 55f, new Vector2(800, 300)),
         ];
+        foreach (IReadOnlyList<Vector2> waterStroke in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(ScaledShape(waterStroke, 55f, new Vector2(800, 300)));
+        }
 
         List<string> names = EnclosedRuneDetector.Find(strokes)
             .Select(region => classifier.Recognize(region.Strokes))
@@ -211,6 +215,34 @@ public class EnclosedRuneDetectorTests
             .ToList();
 
         Assert.Equal(["fire", "water"], names);
+    }
+
+    [Fact]
+    public void Find_WaterTemplateLoops_AreNotTreatedAsEnclosingCircles()
+    {
+        // The water rune's two foot loops are drawn as part of their leg strokes.
+        // If they were separate closed strokes they would be mistaken for
+        // rune-enclosing circles, so a bare water rune could never be identified.
+        Assert.Equal(0, EnclosedRuneDetector.CountCircles(RuneTemplates.Water.Strokes));
+        Assert.Empty(EnclosedRuneDetector.Find(RuneTemplates.Water.Strokes));
+    }
+
+    [Fact]
+    public void Classify_CircledWater_AllStrokesSurviveGrouping()
+    {
+        var classifier = new RuneClassifier();
+        List<List<Vector2>> strokes = [Circle(new Vector2(500, 300), 150f)];
+        foreach (IReadOnlyList<Vector2> waterStroke in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(ScaledShape(waterStroke, 60f, new Vector2(500, 300)));
+        }
+
+        EnclosedRune region = Assert.Single(EnclosedRuneDetector.Find(strokes));
+        Assert.Equal(RuneTemplates.Water.Strokes.Count, region.Strokes.Count);
+
+        RuneMatch? match = classifier.Recognize(region.Strokes);
+        Assert.NotNull(match);
+        Assert.Equal("water", match!.Name);
     }
 
     // ---- Realistic hand-drawn circles ----
@@ -245,15 +277,17 @@ public class EnclosedRuneDetectorTests
             HandDrawnCircle(new Vector2(300, 300), 130f, seed: 1),
             ScaledShape(RuneTemplates.Fire.Strokes[0], 50f, new Vector2(300, 300)),
             HandDrawnCircle(new Vector2(800, 300), 130f, seed: 2),
-            ScaledShape(RuneTemplates.Water.Strokes[0], 50f, new Vector2(800, 300)),
-            ScaledShape(RuneTemplates.Water.Strokes[1], 50f, new Vector2(800, 300)),
         ];
+        foreach (IReadOnlyList<Vector2> waterStroke in RuneTemplates.Water.Strokes)
+        {
+            strokes.Add(ScaledShape(waterStroke, 50f, new Vector2(800, 300)));
+        }
 
         List<EnclosedRune> regions = EnclosedRuneDetector.Find(strokes);
 
         Assert.Equal(2, regions.Count);
         Assert.Single(regions[0].Strokes);
-        Assert.Equal(2, regions[1].Strokes.Count);
+        Assert.Equal(RuneTemplates.Water.Strokes.Count, regions[1].Strokes.Count);
     }
 
     [Fact]

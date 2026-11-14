@@ -134,6 +134,7 @@ public partial class RoomSelfTest : Node
         // Water: three blue jets (the fireball from the previous shot is still alive).
         int beforeWater = Projectiles().Count;
         wand.Enchant("water", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
+        Vector3 waterAim = -camera.GlobalTransform.Basis.Z;
         wand.Shoot(player);
         shots = Projectiles();
         List<Node> waterShots = shots.Skip(beforeWater).ToList();
@@ -142,11 +143,13 @@ public partial class RoomSelfTest : Node
             ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
             && m.AlbedoColor == WandShotFactory.ColorFor("water")));
         Check("water-jets-arc-upward", waterShots.All(n => ((Projectile)n).Direction.Y > 0f));
-        Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(aim) > 0.8f));
+        Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(waterAim) > 0.8f),
+            $"aim={waterAim}, dots=[{string.Join(", ", waterShots.Select(n => ((Projectile)n).Direction.Dot(waterAim).ToString("0.00")))}]");
 
         // Density: three green cones.
         int beforeDensity = Projectiles().Count;
         wand.Enchant("density", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
+        Vector3 densityAim = -camera.GlobalTransform.Basis.Z;
         wand.Shoot(player);
         shots = Projectiles();
         List<Node> densityShots = shots.Skip(beforeDensity).ToList();
@@ -156,7 +159,8 @@ public partial class RoomSelfTest : Node
         Check("density-shots-are-green", densityShots.All(n =>
             ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
             && m.AlbedoColor == WandShotFactory.ColorFor("density")));
-        Check("density-shots-fly-forward", densityShots.All(n => ((Projectile)n).Direction.Dot(aim) > 0.8f));
+        Check("density-shots-fly-forward", densityShots.All(n => ((Projectile)n).Direction.Dot(densityAim) > 0.8f),
+            $"aim={densityAim}, dots=[{string.Join(", ", densityShots.Select(n => ((Projectile)n).Direction.Dot(densityAim).ToString("0.00")))}]");
 
         // All projectiles free themselves once their lifetime elapses.
         await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);
