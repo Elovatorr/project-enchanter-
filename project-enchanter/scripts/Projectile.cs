@@ -41,24 +41,47 @@ public partial class Projectile : Node3D
                 BottomRadius = shot.Size,
                 Height = shot.Size * 2.5f,
             },
+            ShotShape.Cylinder => new CylinderMesh
+            {
+                // Narrows toward the tip so the jet looks like it is spreading/atomising.
+                TopRadius = shot.Size * 0.55f,
+                BottomRadius = shot.Size,
+                Height = shot.Length,
+                RadialSegments = 12,
+                Rings = 1,
+            },
             _ => new SphereMesh { Radius = shot.Size },
         };
 
+        float alpha = Mathf.Clamp(shot.Alpha, 0f, 1f);
+        bool translucent = alpha < 1f;
         MeshInstance3D meshNode = new()
         {
             Mesh = mesh,
             MaterialOverride = new StandardMaterial3D
             {
-                AlbedoColor = shot.Color,
+                AlbedoColor = new Color(shot.Color.R, shot.Color.G, shot.Color.B, alpha),
                 EmissionEnabled = true,
-                Emission = shot.Color * 0.6f,
+                Emission = shot.Color * shot.EmissionStrength,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                Transparency = translucent
+                    ? BaseMaterial3D.TransparencyEnum.Alpha
+                    : BaseMaterial3D.TransparencyEnum.Disabled,
+                ShadingMode = translucent
+                    ? BaseMaterial3D.ShadingModeEnum.Unshaded
+                    : BaseMaterial3D.ShadingModeEnum.PerPixel,
             },
         };
-        if (shot.Shape == ShotShape.Cone)
+        if (shot.Shape is ShotShape.Cone or ShotShape.Cylinder)
         {
-            // Cone meshes point along +Y; rotate so the tip faces the node's -Z (forward).
+            // These meshes point along +Y; rotate so the tip faces the node's -Z (forward).
             meshNode.RotationDegrees = new Vector3(-90f, 0f, 0f);
+        }
+        if (shot.Shape == ShotShape.Cylinder)
+        {
+            // The mesh is centred on its pivot; shift it back so the jet starts
+            // at the muzzle and extends forward.
+            meshNode.Position = new Vector3(0f, 0f, -shot.Length * 0.5f);
         }
         projectile.AddChild(meshNode);
 

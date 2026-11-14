@@ -152,18 +152,22 @@ public partial class RoomSelfTest : Node
                 $"moved {moved.Length():0.0} m, dot={moved.Normalized().Dot(aim):0.000}");
         }
 
-        // Water: three blue jets (the fireball from the previous shot is still alive).
+        // Water: a straight two-layer cylinder jet (the fireball from the previous shot is still alive).
         int beforeWater = Projectiles().Count;
         wand.Enchant("water", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
         Vector3 waterAim = -camera.GlobalTransform.Basis.Z;
         wand.Shoot(player);
         shots = Projectiles();
         List<Node> waterShots = shots.Skip(beforeWater).ToList();
-        Check("water-shot-spawns-three", waterShots.Count == 3, $"projectiles={shots.Count}");
+        Check("water-shot-spawns-jet", waterShots.Count == 2, $"projectiles={shots.Count}");
+        Check("water-shots-are-cylinders", waterShots.All(n =>
+            ((MeshInstance3D)n.GetChild(0)).Mesh is CylinderMesh c && c.Height > 0f));
         Check("water-shots-are-blue", waterShots.All(n =>
             ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
-            && m.AlbedoColor == WandShotFactory.ColorFor("water")));
-        Check("water-jets-arc-upward", waterShots.All(n => ((Projectile)n).Direction.Y > 0f));
+            && SameRgb(m.AlbedoColor, WandShotFactory.ColorFor("water"))));
+        Check("water-jets-look-translucent", waterShots.Any(n =>
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
+            && m.Transparency == BaseMaterial3D.TransparencyEnum.Alpha));
         Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(waterAim) > 0.8f),
             $"aim={waterAim}, dots=[{string.Join(", ", waterShots.Select(n => ((Projectile)n).Direction.Dot(waterAim).ToString("0.00")))}]");
 
@@ -215,6 +219,10 @@ public partial class RoomSelfTest : Node
 
     /// <summary>Live shot projectiles (spawned by Wand.Shoot).</summary>
     private Godot.Collections.Array<Node> Projectiles() => GetTree().GetNodesInGroup("projectile");
+
+    /// <summary>Compares RGB only (materials may have a different alpha).</summary>
+    private static bool SameRgb(Color a, Color b)
+        => Mathf.IsEqualApprox(a.R, b.R) && Mathf.IsEqualApprox(a.G, b.G) && Mathf.IsEqualApprox(a.B, b.B);
 
     /// <summary>Copies a rune template's strokes scaled and offset into canvas space.</summary>
     private static List<List<Vector2>> ScaledTemplate(RuneTemplate rune, float scale, Vector2 offset)

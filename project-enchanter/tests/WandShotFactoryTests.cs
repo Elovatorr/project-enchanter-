@@ -28,20 +28,25 @@ public class WandShotFactoryTests
     }
 
     [Fact]
-    public void For_Water_ThreeBlueJetsArcUpward()
+    public void For_Water_TwoCylinderJetLayers()
     {
         ShotDescriptor[] shots = Shots("water");
 
-        Assert.Equal(3, shots.Length);
+        // A laser-like jet: a bright core inside a wider translucent sheath.
+        Assert.Equal(2, shots.Length);
         foreach (ShotDescriptor shot in shots)
         {
-            Assert.Equal(ShotShape.Sphere, shot.Shape);
+            Assert.Equal(ShotShape.Cylinder, shot.Shape);
             Assert.Equal(new Color(0.25f, 0.5f, 1f), shot.Color);
-            Assert.True(shot.Boost.Y > 0f, $"jets should arc upward: boost={shot.Boost}");
+            Assert.Equal(Vector3.Zero, shot.Boost); // dead ahead: no fan
+            Assert.True(shot.Length > 1f, $"jet should be long: length={shot.Length}");
+            Assert.InRange(shot.Alpha, 0.05f, 1f);
+            Assert.True(shot.Speed > 10f, $"jet should be fast/laser-like: speed={shot.Speed}");
         }
-        // Fan left/centre/right: lateral boosts must span both sides.
-        Assert.Contains(shots, s => s.Boost.X < 0f);
-        Assert.Contains(shots, s => s.Boost.X > 0f);
+        // One opaque-ish core and one more transparent sheath.
+        Assert.Contains(shots, s => s.Alpha >= 0.9f);
+        Assert.Contains(shots, s => s.Alpha < 0.5f);
+        Assert.Contains(shots, s => s.EmissionStrength > 1f); // bright core
     }
 
     [Fact]
@@ -77,6 +82,10 @@ public class WandShotFactoryTests
                 Assert.True(shot.Speed > 0f, $"{element}: speed={shot.Speed}");
                 Assert.True(shot.Size > 0f, $"{element}: size={shot.Size}");
                 Assert.True(shot.Lifetime > 0f, $"{element}: lifetime={shot.Lifetime}");
+                if (shot.Shape == ShotShape.Cylinder)
+                {
+                    Assert.True(shot.Length > 0f, $"{element}: cylinder length={shot.Length}");
+                }
             }
         }
     }

@@ -8,6 +8,7 @@ public enum ShotShape
 {
     Sphere,
     Cone,
+    Cylinder,
 }
 
 /// <summary>
@@ -19,8 +20,17 @@ public sealed class ShotDescriptor
     public ShotShape Shape { get; init; }
     public Color Color { get; init; }
 
-    /// <summary>Radius of the sphere / base radius of the cone, in metres.</summary>
+    /// <summary>Radius of the sphere / base radius of the cone / cylinder radius, in metres.</summary>
     public float Size { get; init; }
+
+    /// <summary>Length of a cylinder beam, in metres (ignored by other shapes).</summary>
+    public float Length { get; init; }
+
+    /// <summary>Material opacity (1 = opaque); used to make jets look like water.</summary>
+    public float Alpha { get; init; } = 1f;
+
+    /// <summary>Emission strength multiplier (higher = brighter, more laser-like).</summary>
+    public float EmissionStrength { get; init; } = 0.6f;
 
     /// <summary>Additive velocity bias in camera space (x right, y up, z back).</summary>
     public Vector3 Boost { get; init; }
@@ -59,35 +69,33 @@ public static class WandShotFactory
                 Lifetime = 2.5f,
             },
         },
-        // Three jets of water fanning out and arcing slightly upward.
+        // A straight water jet: a bright inner core inside a wider translucent
+        // sheath, both long thin cylinders travelling dead ahead like a laser.
         "water" => new[]
         {
             new ShotDescriptor
             {
-                Shape = ShotShape.Sphere,
+                Shape = ShotShape.Cylinder,
                 Color = ColorFor(element),
-                Size = 0.05f,
-                Boost = new Vector3(-0.18f, 0.22f, 0f),
-                Speed = 7f,
-                Lifetime = 1.6f,
+                Size = 0.035f,
+                Length = 2.6f,
+                Alpha = 0.95f,
+                EmissionStrength = 1.8f,
+                Boost = Vector3.Zero,
+                Speed = 26f,
+                Lifetime = 0.5f,
             },
             new ShotDescriptor
             {
-                Shape = ShotShape.Sphere,
+                Shape = ShotShape.Cylinder,
                 Color = ColorFor(element),
-                Size = 0.05f,
-                Boost = new Vector3(0f, 0.28f, 0f),
-                Speed = 7f,
-                Lifetime = 1.6f,
-            },
-            new ShotDescriptor
-            {
-                Shape = ShotShape.Sphere,
-                Color = ColorFor(element),
-                Size = 0.05f,
-                Boost = new Vector3(0.18f, 0.22f, 0f),
-                Speed = 7f,
-                Lifetime = 1.6f,
+                Size = 0.09f,
+                Length = 2.4f,
+                Alpha = 0.28f,
+                EmissionStrength = 0.45f,
+                Boost = Vector3.Zero,
+                Speed = 26f,
+                Lifetime = 0.5f,
             },
         },
         // Three green cones fanned left/centre/right.
