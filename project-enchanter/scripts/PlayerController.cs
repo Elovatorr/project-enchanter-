@@ -19,9 +19,13 @@ public partial class PlayerController : CharacterBody3D
     private Camera3D _camera = null!;
     private float _pitch;
     private Hud? _hud;
+    private Wand? _wand;
 
     /// <summary>Lazy: the HUD may be readied after the player (scene order).</summary>
     private Hud? HudRef => _hud ??= GetTree().GetFirstNodeInGroup("hud") as Hud;
+
+    /// <summary>Lazy for the same reason as the HUD lookup.</summary>
+    private Wand? WandRef => _wand ??= GetTree().GetFirstNodeInGroup("wand") as Wand;
 
     /// <summary>False while a UI overlay is open (movement/look/interaction paused).</summary>
     public bool ControlsEnabled { get; private set; } = true;
@@ -68,6 +72,11 @@ public partial class PlayerController : CharacterBody3D
         else if (@event is InputEventKey { Pressed: true, Keycode: Key.E })
         {
             TryInteract();
+        }
+        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+        {
+            Wand? wand = WandRef;
+            if (wand is not null && wand.Held) wand.Shoot(this);
         }
     }
 

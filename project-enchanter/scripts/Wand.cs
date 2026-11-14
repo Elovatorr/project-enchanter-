@@ -87,6 +87,28 @@ public partial class Wand : StaticBody3D, IInteractable
     }
 
     /// <summary>
+    /// Fires the wand's element effect straight ahead of the camera (only while
+    /// held): fire = one fireball, water = three water jets, density = three cones.
+    /// </summary>
+    public void Shoot(PlayerController player)
+    {
+        if (!Held) return;
+        IReadOnlyList<ShotDescriptor> shots = WandShotFactory.For(Element);
+        if (shots.Count == 0) return;
+
+        Camera3D camera = player.GetNode<Camera3D>("Camera3D");
+        Transform3D cam = camera.GlobalTransform;
+        Vector3 forward = -cam.Basis.Z;
+        Node scene = GetTree().CurrentScene;
+
+        foreach (ShotDescriptor shot in shots)
+        {
+            Vector3 direction = (cam.Basis * shot.Boost + forward).Normalized();
+            Projectile.Launch(scene, GlobalPosition, direction, shot);
+        }
+    }
+
+    /// <summary>
     /// Applies an element to the wand: colour/glow plus the drawn rune etched
     /// onto the top face.
     /// </summary>

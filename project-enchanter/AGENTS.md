@@ -26,6 +26,8 @@ than no guidance.
 | `scripts/EnchantingTable.cs` | Interactable table: opens the enchanting UI for the wand. |
 | `scripts/Wand.cs` | Interactable wand prism: close-up enchanting pose, element colour, etched rune decal, pick-up into the camera. |
 | `scripts/RuneTextureFactory.cs` | Rasterizes drawn strokes into a transparent texture for the wand's rune decal. |
+| `scripts/WandShotFactory.cs` | Pure C# — maps an enchanted element to shot descriptors (fire fireball, water jets, density cones). |
+| `scripts/Projectile.cs` | `Node3D` shot projectile: travels along its launch direction, frees itself after its lifetime; group `projectile`. |
 | `scripts/EnchantingUI.cs` | Full-screen overlay hosting the drawing scene; reports cast runes + strokes and closes. |
 | `scripts/RoomSelfTest.cs` | In-engine test for the room + enchanting flow (see "Testing in engine"). |
 | `tests/room_self_test.tscn` | Scene that runs `RoomSelfTest`. |
@@ -44,6 +46,7 @@ than no guidance.
 | `tests/DrawingSurfaceModelTests.cs` | Unit/regression tests for the drawing model. |
 | `tests/RuneFeaturesTests.cs` | Feature pipeline tests incl. invariance + Python-trainer parity. |
 | `tests/RuneClassifierTests.cs` | Classifier tests: invariance, hand-drawn tolerance, rejection. |
+| `tests/WandShotFactoryTests.cs` | Shot tests: per-element projectile count/shape/colour, forward direction, rejection of unknown elements. |
 | `tests/recognition_self_test.tscn` | Scene that runs `RecognitionSelfTest` in-engine. |
 | `tools/train_rune_model.py` | Trains the MLP (numpy) and writes `resources/rune_model/*.csv`. |
 
@@ -121,6 +124,7 @@ It draws fire, water and density at various transforms (expect the right rune ca
 - **EnchantingTable**: `StaticBody3D` with a box prism (`BoxMesh` 2.4 × 1 × 1.2) at (2, 0.5, −3), including a matching `BoxShape3D`. Interacting shows the wand up close, opens `EnchantingUI` and pauses player controls.
 - **Wand**: small prism (0.06 × 0.06 × 0.55) on the table. While enchanting it is reparented to the camera at ~1.4× scale with its top face toward the viewer (`ShowCloseUp`), and restored afterwards (`EndCloseUp`). A cast call `Enchant(element, strokes)` tints it and rasterizes the strokes (`RuneTextureFactory`) onto the `RuneDecal` plane on its top face. Once enchanted, E picks it up and reparents it to the camera (`Held`).
 - **HUD** (`Hud.cs`): centre reticle (two bars), bottom interaction prompt, control hint.
+- **Shooting**: while the wand is `Held`, a left click (`InputEventMouseButton`, `ControlsEnabled` only) calls `Wand.Shoot(player)`, which spawns `Projectile` nodes straight ahead of the camera from `WandShotFactory.For(element)`: fire → one red sphere (fireball), water → three blue droplets arcing upward, density → three green cones (`CylinderMesh` with `TopRadius = 0`). Projectiles travel along the camera's forward direction (plus the descriptor's camera-space `Boost`) and `QueueFree()` after `Lifetime`; they live in group `projectile`.
 - **Enchanting overlay** (`EnchantingUI.cs`): lightly dimmed background (so the wand preview stays visible) + title/hint/Cancel, hosting `res://main.tscn`. `DrawingSurface` raises `CastCompleted(runes, strokes)`; the overlay closes and invokes `Open`'s callback with both. Cancel invokes the optional `onCancel` (used to restore the wand).
 - **Geometry**: floor plane (20 × 14) with a thin box collision; four wall boxes with collisions.
 - **Lighting**: one `DirectionalLight3D` with shadows; materials are plain `StandardMaterial3D` colours.
@@ -134,7 +138,7 @@ dotnet build
 # run res://tests/room_self_test.tscn (or via the godot MCP run_project)
 ```
 
-It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera.
+It instantiates the room, opens the UI through the table, draws the demo runes, checks the wand becomes fire-enchanted, the UI closes, controls resume, and the wand attaches to the camera. The shooting checks fire through the real left-click pipeline: fire spawns one red sphere that moves and despawns after its lifetime; water spawns three blue droplets; density spawns three green cones (`GetNodesInGroup("projectile")` is the counter).
 
 ## Commands
 
@@ -174,6 +178,7 @@ when something "doesn't work" at runtime.
 | Changed the model/training (shapes, augmentation, architecture, epochs) | Retrain, check held-out accuracy in the trainer output, and re-run `RuneClassifierTests`. Keep held-out accuracy ≳ 99% and fire recall ≳ 98%. |
 | Changed `RuneClassifier` threshold or API | Update the threshold-related tests and the HUD self-test expectations. |
 | Changed `EnclosedRuneDetector` (circle/enclosure geometry) | Update `EnclosedRuneDetectorTests` (circle fit, enclosure, nesting, multi-circle, invariance) and add a self-test case if the on-screen flow changes. |
+| Changed shooting (`WandShotFactory` descriptors, `Projectile`, `Wand.Shoot`, left-click wiring) | Update `WandShotFactoryTests` (per-element count/shape/colour) and the ROOMSELFTEST shot checks; count projectiles as **deltas** — earlier shots stay alive until their lifetime elapses. |
 | Added a rune | See "Retraining and changing runes": trainer `FIRE`/shapes + `OUTPUT_NAMES` + `RuneTemplates.cs` + retrain + classifier tests for the new rune and rejection of the others. |
 | Renamed / deleted a class or method | Update all references in `tests/` in the same change — the build must stay green. |
 | Changed exported tunables (e.g. `MinPointDistance` default) | Update any test that relied on the default and any test names mentioning the value. |

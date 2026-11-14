@@ -1,5 +1,7 @@
 using Godot;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace ProjectEnchanter;
@@ -71,7 +73,7 @@ public partial class RoomSelfTest : Node
 
         // Draw demo runes in the embedded drawing scene and identify them.
         Check("drawing-embedded", ui.Drawing is not null);
-        ui.Drawing.DrawDemoRunes();
+        ui.Drawing!.DrawDemoRunes();
         await WaitFrames(2);
 
         // Click the Identify button through the real input pipeline.
@@ -104,6 +106,54 @@ public partial class RoomSelfTest : Node
         Check("wand-attached-to-camera", wand.GetParent() == player.GetNode("Camera3D"));
         Check("wand-no-prompt", wand.InteractionPrompt.Length == 0, wand.InteractionPrompt);
 
+        // ---- Shooting via the real left-click pipeline ----
+        int projectilesBefore = Projectiles().Count;
+        ClickAt(new Vector2(600f, 400f)); // a click anywhere fires the held wand
+        await WaitFrames(2);
+        Godot.Collections.Array<Node> shots = Projectiles();
+        Check("fire-shot-spawns-one", shots.Count == 1, $"projectiles {projectilesBefore} -> {shots.Count}");
+        if (shots.Count > 0)
+        {
+            Projectile fireball = (Projectile)shots[0];
+            MeshInstance3D shotMesh = (MeshInstance3D)fireball.GetChild(0);
+            Check("fire-shot-is-sphere", shotMesh.Mesh is SphereMesh, shotMesh.Mesh?.GetType().Name ?? "null");
+            Check("fire-shot-is-red",
+                (shotMesh.MaterialOverride as StandardMaterial3D)?.AlbedoColor == WandShotFactory.ColorFor("fire"),
+                (shotMesh.MaterialOverride as StandardMaterial3D)?.AlbedoColor.ToString() ?? "null");
+            Vector3 spawnedAt = fireball.GlobalPosition;
+            await WaitFrames(30);
+            Check("fire-shot-moves-forward", fireball.GlobalPosition.DistanceTo(spawnedAt) > 0.5f,
+                $"moved {fireball.GlobalPosition.DistanceTo(spawnedAt):0.0} m");
+        }
+
+        // Water: three blue jets (the fireball from the previous shot is still alive).
+        int beforeWater = Projectiles().Count;
+        wand.Enchant("water", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
+        wand.Shoot(player);
+        shots = Projectiles();
+        List<Node> waterShots = shots.Skip(beforeWater).ToList();
+        Check("water-shot-spawns-three", waterShots.Count == 3, $"projectiles={shots.Count}");
+        Check("water-shots-are-blue", waterShots.All(n =>
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
+            && m.AlbedoColor == WandShotFactory.ColorFor("water")));
+
+        // Density: three green cones.
+        int beforeDensity = Projectiles().Count;
+        wand.Enchant("density", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
+        wand.Shoot(player);
+        shots = Projectiles();
+        List<Node> densityShots = shots.Skip(beforeDensity).ToList();
+        Check("density-shot-spawns-three-cones", densityShots.Count == 3, $"projectiles={shots.Count}");
+        Check("density-shots-are-cones", densityShots.All(n =>
+            ((MeshInstance3D)n.GetChild(0)).Mesh is CylinderMesh c && c.TopRadius == 0f));
+        Check("density-shots-are-green", densityShots.All(n =>
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
+            && m.AlbedoColor == WandShotFactory.ColorFor("density")));
+
+        // All projectiles free themselves once their lifetime elapses.
+        await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);
+        Check("shots-despawn-after-lifetime", Projectiles().Count == 0, $"projectiles={Projectiles().Count}");
+
         GD.Print($"ROOMSELFTEST SUMMARY: passed={_passed} failed={_failed}");
         await WaitFrames(2);
         GetTree().Quit(_failed == 0 ? 0 : 1);
@@ -115,6 +165,9 @@ public partial class RoomSelfTest : Node
         string extra = detail is null ? "" : $" detail='{detail}'";
         GD.Print($"ROOMSELFTEST {(ok ? "PASS" : "FAIL")} [{name}]{extra}");
     }
+
+    /// <summary>Live shot projectiles (spawned by Wand.Shoot).</summary>
+    private Godot.Collections.Array<Node> Projectiles() => GetTree().GetNodesInGroup("projectile");
 
     /// <summary>Sends a short stroke via the real input pipeline.</summary>
     private static void SendSyntheticStroke()

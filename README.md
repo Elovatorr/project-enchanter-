@@ -22,6 +22,8 @@ templates or hard-coded shapes at runtime.
   is segmented and classified independently.
 - **Wand enchanting** — a successful cast tints the wand with the element colour and
   **etches the drawn rune onto its top face**, where it stays when you pick the wand up.
+- **Wand shooting** — left click while holding an enchanted wand fires its element:
+  fire → a fireball, water → three jets of water, density → three green cones.
 
 ## Controls
 
@@ -32,6 +34,7 @@ templates or hard-coded shapes at runtime.
 | Shift | Sprint |
 | Space | Jump |
 | E | Interact (table, wand) |
+| Left click | Shoot the wand's element effect (fireball / water jets / green cones) while holding an enchanted wand |
 | Esc | Release / capture the mouse |
 | Left drag | Draw (during enchanting) |
 | Right click | Undo last stroke |
@@ -68,11 +71,13 @@ project-enchanter/
 ├── scenes/room.tscn            3D room: player, table, wand, HUD, enchanting overlay
 ├── main.tscn                   Standalone drawing-canvas scene
 ├── scripts/
-│   ├── PlayerController.cs     FPS movement, mouse look, interaction raycast
+│   ├── PlayerController.cs     FPS movement, mouse look, interaction raycast, left-click fire
 │   ├── Hud.cs                  Reticle, interaction prompt, control hints
 │   ├── IInteractable.cs        Look-at interaction interface
 │   ├── EnchantingTable.cs      Opens the enchanting overlay for the wand
-│   ├── Wand.cs                 Close-up pose, element colour, rune decal, pick-up
+│   ├── Wand.cs                 Close-up pose, element colour, rune decal, pick-up, Shoot()
+│   ├── WandShotFactory.cs      Element → shot descriptors (fireball / jets / cones)
+│   ├── Projectile.cs           Moving projectile node; frees itself after its lifetime
 │   ├── EnchantingUI.cs         Overlay hosting the drawing scene
 │   ├── DrawingSurface.cs       Drawing input/render, HUD, cast signal, flash
 │   ├── DrawingSurfaceModel.cs  Pure drawing/undo logic
@@ -125,7 +130,7 @@ dotnet test tests/project-enchanter.tests.csproj
 
 # in-engine suites (build first!)
 #   res://tests/recognition_self_test.tscn  - rune recognition and drawing HUD
-#   res://tests/room_self_test.tscn         - room, interaction, enchanting, wand
+#   res://tests/room_self_test.tscn         - room, interaction, enchanting, wand, shooting
 ```
 
 Run the scenes from the Godot editor (F6) or via an MCP/automation tool, and read the
