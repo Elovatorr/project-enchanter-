@@ -43,10 +43,18 @@ public class WandShotFactoryTests
             Assert.InRange(shot.Alpha, 0.05f, 1f);
             Assert.True(shot.Speed > 10f, $"jet should be fast/laser-like: speed={shot.Speed}");
         }
-        // One opaque-ish core and one more transparent sheath.
+        // One opaque-ish core and one more transparent sheath, both using the jet shader.
         Assert.Contains(shots, s => s.Alpha >= 0.9f);
         Assert.Contains(shots, s => s.Alpha < 0.5f);
         Assert.Contains(shots, s => s.EmissionStrength > 1f); // bright core
+        Assert.All(shots, s => Assert.Equal(WandShotFactory.WaterShaderPath, s.ShaderPath));
+    }
+
+    [Fact]
+    public void For_NonWaterElements_DoNotUseTheWaterShader()
+    {
+        Assert.All(WandShotFactory.For("fire"), s => Assert.Equal("", s.ShaderPath));
+        Assert.All(WandShotFactory.For("density"), s => Assert.Equal("", s.ShaderPath));
     }
 
     [Fact]

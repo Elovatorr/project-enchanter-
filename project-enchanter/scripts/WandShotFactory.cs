@@ -32,6 +32,9 @@ public sealed class ShotDescriptor
     /// <summary>Emission strength multiplier (higher = brighter, more laser-like).</summary>
     public float EmissionStrength { get; init; } = 0.6f;
 
+    /// <summary>Optional shader resource path; replaces the plain StandardMaterial3D.</summary>
+    public string ShaderPath { get; init; } = "";
+
     /// <summary>Additive velocity bias in camera space (x right, y up, z back).</summary>
     public Vector3 Boost { get; init; }
 
@@ -45,6 +48,9 @@ public sealed class ShotDescriptor
 /// </summary>
 public static class WandShotFactory
 {
+    /// <summary>Procedural water-jet shader used by both water cylinder layers.</summary>
+    public const string WaterShaderPath = "res://shaders/water_jet.gdshader";
+
     public static Color ColorFor(string element) => element switch
     {
         "fire" => new Color(1f, 0.25f, 0.15f),
@@ -81,6 +87,7 @@ public static class WandShotFactory
                 Length = 2.6f,
                 Alpha = 0.95f,
                 EmissionStrength = 1.8f,
+                ShaderPath = WaterShaderPath,
                 Boost = Vector3.Zero,
                 Speed = 26f,
                 Lifetime = 0.5f,
@@ -91,8 +98,9 @@ public static class WandShotFactory
                 Color = ColorFor(element),
                 Size = 0.09f,
                 Length = 2.4f,
-                Alpha = 0.28f,
+                Alpha = 0.45f,
                 EmissionStrength = 0.45f,
+                ShaderPath = WaterShaderPath,
                 Boost = Vector3.Zero,
                 Speed = 26f,
                 Lifetime = 0.5f,

@@ -25,7 +25,8 @@ templates or hard-coded shapes at runtime.
 - **Wand enchanting** — a successful cast tints the wand with the element colour and
   **etches the drawn rune onto its top face**, where it stays when you pick the wand up.
 - **Wand shooting** — left click while holding an enchanted wand fires its element:
-  fire → a fireball, water → a straight laser-like jet of water, density → three green cones.
+  fire → a fireball, water → a straight laser-like jet of water (two cylinder layers with a
+  procedural flow/foam shader), density → three green cones.
 
 ## Controls
 
@@ -72,6 +73,7 @@ project-enchanter/
 ├── project.godot               Godot project (main scene = scenes/room.tscn)
 ├── scenes/room.tscn            3D room: player, wand, HUD, enchanting + inventory UI
 ├── main.tscn                   Standalone drawing-canvas scene
+├── shaders/water_jet.gdshader  Procedural water jet (flow streaks, foam, rim glow)
 ├── scripts/
 │   ├── PlayerController.cs     FPS movement, mouse look, interaction raycast, left-click fire
 │   ├── Hud.cs                  Reticle, interaction prompt, control hints

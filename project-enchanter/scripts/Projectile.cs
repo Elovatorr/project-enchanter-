@@ -54,23 +54,10 @@ public partial class Projectile : Node3D
         };
 
         float alpha = Mathf.Clamp(shot.Alpha, 0f, 1f);
-        bool translucent = alpha < 1f;
         MeshInstance3D meshNode = new()
         {
             Mesh = mesh,
-            MaterialOverride = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(shot.Color.R, shot.Color.G, shot.Color.B, alpha),
-                EmissionEnabled = true,
-                Emission = shot.Color * shot.EmissionStrength,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                Transparency = translucent
-                    ? BaseMaterial3D.TransparencyEnum.Alpha
-                    : BaseMaterial3D.TransparencyEnum.Disabled,
-                ShadingMode = translucent
-                    ? BaseMaterial3D.ShadingModeEnum.Unshaded
-                    : BaseMaterial3D.ShadingModeEnum.PerPixel,
-            },
+            MaterialOverride = CreateMaterial(shot, alpha),
         };
         if (shot.Shape is ShotShape.Cone or ShotShape.Cylinder)
         {
@@ -86,6 +73,42 @@ public partial class Projectile : Node3D
         projectile.AddChild(meshNode);
 
         return projectile;
+    }
+
+    /// <summary>
+    /// Builds the projectile material: a custom shader when the descriptor asks
+    /// for one (water's procedural jet), otherwise the plain emissive material.
+    /// </summary>
+    private static Material CreateMaterial(ShotDescriptor shot, float alpha)
+    {
+        if (shot.ShaderPath.Length > 0)
+        {
+            Shader? shader = GD.Load<Shader>(shot.ShaderPath);
+            if (shader is not null)
+            {
+                ShaderMaterial material = new() { Shader = shader };
+                material.SetShaderParameter("color", new Color(shot.Color.R, shot.Color.G, shot.Color.B, 1f));
+                material.SetShaderParameter("opacity", alpha);
+                material.SetShaderParameter("emission_strength", shot.EmissionStrength);
+                return material;
+            }
+            GD.PushWarning($"Could not load shader '{shot.ShaderPath}'; using the plain material.");
+        }
+
+        bool translucent = alpha < 1f;
+        return new StandardMaterial3D
+        {
+            AlbedoColor = new Color(shot.Color.R, shot.Color.G, shot.Color.B, alpha),
+            EmissionEnabled = true,
+            Emission = shot.Color * shot.EmissionStrength,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            Transparency = translucent
+                ? BaseMaterial3D.TransparencyEnum.Alpha
+                : BaseMaterial3D.TransparencyEnum.Disabled,
+            ShadingMode = translucent
+                ? BaseMaterial3D.ShadingModeEnum.Unshaded
+                : BaseMaterial3D.ShadingModeEnum.PerPixel,
+        };
     }
 
     public override void _PhysicsProcess(double delta)

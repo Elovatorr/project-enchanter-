@@ -179,12 +179,16 @@ public partial class RoomSelfTest : Node
         Check("water-shot-spawns-jet", waterShots.Count == 2, $"projectiles={shots.Count}");
         Check("water-shots-are-cylinders", waterShots.All(n =>
             ((MeshInstance3D)n.GetChild(0)).Mesh is CylinderMesh c && c.Height > 0f));
+        Check("water-shots-use-jet-shader", waterShots.All(n =>
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is ShaderMaterial sm
+            && sm.Shader is not null
+            && sm.Shader.ResourcePath.EndsWith("water_jet.gdshader")));
         Check("water-shots-are-blue", waterShots.All(n =>
-            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
-            && SameRgb(m.AlbedoColor, WandShotFactory.ColorFor("water"))));
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is ShaderMaterial sm
+            && SameRgb(sm.GetShaderParameter("color").AsColor(), WandShotFactory.ColorFor("water"))));
         Check("water-jets-look-translucent", waterShots.Any(n =>
-            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is StandardMaterial3D m
-            && m.Transparency == BaseMaterial3D.TransparencyEnum.Alpha));
+            ((MeshInstance3D)n.GetChild(0)).MaterialOverride is ShaderMaterial sm
+            && sm.GetShaderParameter("opacity").AsSingle() < 1f));
         Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(waterAim) > 0.8f),
             $"aim={waterAim}, dots=[{string.Join(", ", waterShots.Select(n => ((Projectile)n).Direction.Dot(waterAim).ToString("0.00")))}]");
 
