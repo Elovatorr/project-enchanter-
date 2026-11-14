@@ -59,6 +59,9 @@ public static class WandShotFactory
         _ => new Color(1f, 0.8f, 0.3f),
     };
 
+    /// <summary>Water fires continuously while the trigger is held; other elements fire once.</summary>
+    public static bool FiresContinuously(string element) => element == "water";
+
     /// <summary>Projectiles to spawn for the element; empty for unknown/none.</summary>
     public static IReadOnlyList<ShotDescriptor> For(string element) => element switch
     {

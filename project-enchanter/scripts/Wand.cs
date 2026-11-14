@@ -18,6 +18,9 @@ public partial class Wand : StaticBody3D, IInteractable
     /// <summary>True when the wand is neither held nor in the enchanting close-up.</summary>
     public bool Stored => !Held && !InCloseUp;
 
+    /// <summary>Number of shots fired (used by in-engine tests).</summary>
+    public int ShotsFired { get; private set; }
+
     /// <summary>The strokes of the rune currently etched on the wand (for editing).</summary>
     public IReadOnlyList<IReadOnlyList<Vector2>> CurrentStrokes { get; private set; } = [];
 
@@ -141,6 +144,7 @@ public partial class Wand : StaticBody3D, IInteractable
         Transform3D cam = camera.GlobalTransform;
         Vector3 forward = -cam.Basis.Z;
         Node scene = GetTree().CurrentScene;
+        ShotsFired++;
 
         foreach (ShotDescriptor shot in shots)
         {

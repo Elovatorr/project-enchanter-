@@ -16,10 +16,15 @@ public partial class PlayerController : CharacterBody3D
     [Export] public float Gravity { get; set; } = 9.8f;
     [Export] public float InteractRange { get; set; } = 3f;
 
+    /// <summary>Seconds between shots while holding the button with a water wand.</summary>
+    [Export] public float WaterFireInterval { get; set; } = 0.09f;
+
     private Camera3D _camera = null!;
     private float _pitch;
     private Hud? _hud;
     private Wand? _wand;
+    private bool _fireHeld;
+    private float _continuousCooldown;
 
     /// <summary>Lazy: the HUD may be readied after the player (scene order).</summary>
     private Hud? HudRef => _hud ??= GetTree().GetFirstNodeInGroup("hud") as Hud;
@@ -36,6 +41,8 @@ public partial class PlayerController : CharacterBody3D
         if (!enabled)
         {
             Velocity = Vector3.Zero;
+            _fireHeld = false;
+            _continuousCooldown = 0f;
             HudRef?.SetPrompt(null);
         }
     }
@@ -73,10 +80,16 @@ public partial class PlayerController : CharacterBody3D
         {
             TryInteract();
         }
-        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } click)
         {
-            Wand? wand = WandRef;
-            if (wand is not null && wand.Held) wand.Shoot(this);
+            _fireHeld = click.Pressed;
+            if (click.Pressed)
+            {
+                // Fire immediately; continuous elements keep firing while held.
+                _continuousCooldown = WaterFireInterval;
+                Wand? wand = WandRef;
+                if (wand is not null && wand.Held) wand.Shoot(this);
+            }
         }
     }
 
@@ -116,6 +129,26 @@ public partial class PlayerController : CharacterBody3D
         MoveAndSlide();
 
         UpdatePrompt();
+        HandleContinuousFire(dt);
+    }
+
+    /// <summary>
+    /// Fires repeatedly while the left button is held and the equipped wand is a
+    /// continuous element (water). Fire/density stay one shot per click.
+    /// </summary>
+    private void HandleContinuousFire(float dt)
+    {
+        Wand? wand = WandRef;
+        if (!_fireHeld || wand is not { Held: true } || !WandShotFactory.FiresContinuously(wand.Element))
+        {
+            return;
+        }
+
+        _continuousCooldown -= dt;
+        if (_continuousCooldown > 0f) return;
+
+        wand.Shoot(this);
+        _continuousCooldown = WaterFireInterval;
     }
 
     /// <summary>Updates the HUD prompt based on what the reticle is aimed at.</summary>

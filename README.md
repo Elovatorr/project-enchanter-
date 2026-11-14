@@ -26,7 +26,7 @@ templates or hard-coded shapes at runtime.
   **etches the drawn rune onto its top face**, where it stays when you pick the wand up.
 - **Wand shooting** — left click while holding an enchanted wand fires its element:
   fire → a fireball, water → a straight laser-like jet of water (two cylinder layers with a
-  procedural flow/foam shader), density → three green cones.
+  procedural flow/foam shader; **hold to keep spraying**), density → three green cones.
 
 ## Controls
 
@@ -37,7 +37,7 @@ templates or hard-coded shapes at runtime.
 | Shift | Sprint |
 | Space | Jump |
 | Tab | Open / close the inventory |
-| Left click | Shoot the wand's element effect (fireball / water jets / green cones) while holding an enchanted wand |
+| Left click | Shoot the wand's element effect while holding an enchanted wand (hold for a continuous water jet) |
 | Esc | Release / capture the mouse |
 | Left drag | Draw (during enchanting) |
 | Right click | Undo last stroke |

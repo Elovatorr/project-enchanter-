@@ -58,6 +58,16 @@ public class WandShotFactoryTests
     }
 
     [Fact]
+    public void FiresContinuously_OnlyWater()
+    {
+        Assert.True(WandShotFactory.FiresContinuously("water"));
+        Assert.False(WandShotFactory.FiresContinuously("fire"));
+        Assert.False(WandShotFactory.FiresContinuously("density"));
+        Assert.False(WandShotFactory.FiresContinuously(""));
+        Assert.False(WandShotFactory.FiresContinuously("unknown"));
+    }
+
+    [Fact]
     public void For_Density_ThreeGreenCones()
     {
         ShotDescriptor[] shots = Shots("density");

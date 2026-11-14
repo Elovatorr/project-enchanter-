@@ -192,6 +192,19 @@ public partial class RoomSelfTest : Node
         Check("water-jets-fly-forward", waterShots.All(n => ((Projectile)n).Direction.Dot(waterAim) > 0.8f),
             $"aim={waterAim}, dots=[{string.Join(", ", waterShots.Select(n => ((Projectile)n).Direction.Dot(waterAim).ToString("0.00")))}]");
 
+        // Holding left click keeps the water jet firing; releasing stops it.
+        int shotsBeforeHold = wand.ShotsFired;
+        SendLeftButton(true);
+        await ToSignal(GetTree().CreateTimer(0.6f), SceneTreeTimer.SignalName.Timeout);
+        SendLeftButton(false);
+        await WaitFrames(2);
+        int heldShots = wand.ShotsFired - shotsBeforeHold;
+        Check("water-hold-fires-continuously", heldShots >= 4, $"shots={heldShots}");
+        int shotsAtRelease = wand.ShotsFired;
+        await ToSignal(GetTree().CreateTimer(0.4f), SceneTreeTimer.SignalName.Timeout);
+        Check("water-release-stops-firing", wand.ShotsFired == shotsAtRelease,
+            $"extra={wand.ShotsFired - shotsAtRelease}");
+
         // Density: three green cones.
         int beforeDensity = Projectiles().Count;
         wand.Enchant("density", new[] { new[] { new Vector2(0, 0), new Vector2(1, 1) } });
@@ -207,6 +220,15 @@ public partial class RoomSelfTest : Node
             && m.AlbedoColor == WandShotFactory.ColorFor("density")));
         Check("density-shots-fly-forward", densityShots.All(n => ((Projectile)n).Direction.Dot(densityAim) > 0.8f),
             $"aim={densityAim}, dots=[{string.Join(", ", densityShots.Select(n => ((Projectile)n).Direction.Dot(densityAim).ToString("0.00")))}]");
+
+        // Non-continuous elements fire once per press even when the button is held.
+        int shotsBeforeDensityHold = wand.ShotsFired;
+        SendLeftButton(true);
+        await ToSignal(GetTree().CreateTimer(0.35f), SceneTreeTimer.SignalName.Timeout);
+        SendLeftButton(false);
+        await WaitFrames(2);
+        Check("density-hold-fires-once", wand.ShotsFired - shotsBeforeDensityHold == 1,
+            $"shots={wand.ShotsFired - shotsBeforeDensityHold}");
 
         // All projectiles free themselves once their lifetime elapses.
         await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);
@@ -305,6 +327,17 @@ public partial class RoomSelfTest : Node
             ButtonIndex = MouseButton.Left,
             Pressed = false,
             Position = new Vector2(420f, 350f),
+        });
+    }
+
+    /// <summary>Sends a left button press or release through the real input pipeline.</summary>
+    private static void SendLeftButton(bool pressed)
+    {
+        Input.ParseInputEvent(new InputEventMouseButton
+        {
+            ButtonIndex = MouseButton.Left,
+            Pressed = pressed,
+            Position = new Vector2(600f, 400f),
         });
     }
 
