@@ -92,7 +92,7 @@ public static class WandShotFactory
                 EmissionStrength = 1.8f,
                 ShaderPath = WaterShaderPath,
                 Boost = Vector3.Zero,
-                Speed = 50f,
+                Speed = 75f,
                 Lifetime = 0.5f,
             },
             new ShotDescriptor
@@ -105,7 +105,7 @@ public static class WandShotFactory
                 EmissionStrength = 0.45f,
                 ShaderPath = WaterShaderPath,
                 Boost = Vector3.Zero,
-                Speed = 26f,
+                Speed = 75f,
                 Lifetime = 0.5f,
             },
         },
