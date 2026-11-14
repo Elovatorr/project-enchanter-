@@ -1,5 +1,6 @@
 using Godot;
 using ProjectEnchanter;
+using System.Collections.Generic;
 using Xunit;
 
 namespace ProjectEnchanter.Tests;
@@ -211,6 +212,68 @@ public class DrawingSurfaceModelTests
         Assert.Empty(model.Strokes);
     }
 
+    // ---- Load (edit an existing rune) ----
+
+    [Fact]
+    public void Load_ReplacesExistingStrokes()
+    {
+        var model = NewModel();
+        model.BeginStroke(new Vector2(0, 0));
+        model.EndStroke();
+
+        model.Load([new List<Vector2> { new(10, 10), new(20, 20) }]);
+
+        Assert.Single(model.Strokes);
+        Assert.Equal(2, model.Strokes[0].Count);
+        Assert.Equal(new Vector2(10, 10), model.Strokes[0][0]);
+    }
+
+    [Fact]
+    public void Load_CopiesPoints_SoTheSourceIsNotAliased()
+    {
+        var model = NewModel();
+        List<Vector2> source = [new(0, 0), new(5, 5)];
+
+        model.Load([source]);
+        source.Add(new Vector2(99, 99));
+
+        Assert.Equal(2, model.Strokes[0].Count);
+    }
+
+    [Fact]
+    public void Load_EmptyList_ClearsStrokes()
+    {
+        var model = NewModel();
+        model.BeginStroke(Vector2.Zero);
+        model.EndStroke();
+
+        model.Load([]);
+
+        Assert.Empty(model.Strokes);
+    }
+
+    [Fact]
+    public void Load_SkipsEmptyStrokes()
+    {
+        var model = NewModel();
+
+        model.Load([[], new List<Vector2> { new(1, 1) }, []]);
+
+        Assert.Single(model.Strokes);
+    }
+
+    [Fact]
+    public void Load_WhileDrawing_StopsTheInProgressStroke()
+    {
+        var model = NewModel();
+        model.BeginStroke(new Vector2(3, 3));
+
+        model.Load([new List<Vector2> { new(0, 0), new(4, 4) }]);
+
+        Assert.False(model.IsDrawing);
+        Assert.Single(model.Strokes);
+    }
+
     // ---- Regression: full drawing session ----
 
     [Fact]
@@ -256,5 +319,26 @@ public class DrawingSurfaceModelTests
         model.BeginStroke(new Vector2(1, 1));
 
         Assert.Single(model.Strokes);
+    }
+
+    [Fact]
+    public void Regression_EditSession_UndoesLoadedStrokesAndDrawsNewOnes()
+    {
+        // Editing a wand's rune: the previous strokes are loaded, some are
+        // undone, and new ones are drawn before identifying again.
+        var model = NewModel();
+        model.Load(
+        [
+            new List<Vector2> { new(0, 0), new(4, 4) },
+            new List<Vector2> { new(10, 10), new(14, 14) },
+        ]);
+
+        Assert.True(model.UndoLastStroke());
+        model.BeginStroke(new Vector2(50, 50));
+        model.AppendPoint(new Vector2(60, 60));
+        model.EndStroke();
+
+        Assert.Equal(2, model.Strokes.Count);
+        Assert.Equal(new Vector2(50, 50), model.Strokes[^1][0]);
     }
 }

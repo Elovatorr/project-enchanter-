@@ -1,5 +1,6 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
 namespace ProjectEnchanter;
 
@@ -28,7 +29,8 @@ public partial class EnchantingTable : StaticBody3D, IInteractable
         {
             Wand? wand = WandRef;
             if (wand is null) return "Enchanting table";
-            if (wand.Held) return "Enchanting table (wand taken)";
+            // Holding the wand does not lock the enchantment: the table can edit it.
+            if (wand.Held) return "[E] Edit enchantment";
             if (wand.Enchanted) return "[E] Re-enchant wand";
             return "[E] Enchant wand";
         }
@@ -37,21 +39,25 @@ public partial class EnchantingTable : StaticBody3D, IInteractable
     public void Interact(PlayerController player)
     {
         Wand? wand = WandRef;
-        if (wand is null || wand.Held) return;
+        if (wand is null || wand.InCloseUp) return;
 
         EnchantingUI? ui = GetTree().GetFirstNodeInGroup("enchanting_ui") as EnchantingUI;
         if (ui is null) return;
 
-        // Present the wand up close while the player draws.
+        // Present the wand up close while the player draws/edits. This works while
+        // the wand is held; EndCloseUp puts it back in the hand afterwards.
         Camera3D camera = player.GetNode<Camera3D>("Camera3D");
+        IReadOnlyList<IReadOnlyList<Vector2>> existing = wand.CurrentStrokes;
         wand.ShowCloseUp(camera);
 
         ui.Open(
             onComplete: (runes, strokes) =>
             {
+                // No runes recognised: keep the existing enchantment untouched.
                 if (runes.Length > 0) wand.Enchant(runes[0], strokes);
                 wand.EndCloseUp();
             },
-            onCancel: wand.EndCloseUp);
+            onCancel: wand.EndCloseUp,
+            initialStrokes: existing);
     }
 }

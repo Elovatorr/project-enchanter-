@@ -13,6 +13,9 @@ templates or hard-coded shapes at runtime.
   interactable; press **E** to use it.
 - **Enchanting table** — interacting presents the wand up close, large in view, and opens
   the drawing overlay.
+- **Editable enchantments** — interact with the table again, even while holding the wand:
+  the current rune is loaded onto the canvas so you can undo strokes, redraw part of it,
+  and identify again to change the element. Cancel leaves the enchantment untouched.
 - **Rune drawing** — freehand drawing on the overlay (the original 2D canvas scene is still
   runnable on its own).
 - **ML rune recognition** — a small MLP classifies `fire`, `water`, `density`, or `unknown`.

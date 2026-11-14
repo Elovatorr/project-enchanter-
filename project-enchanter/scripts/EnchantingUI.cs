@@ -16,6 +16,13 @@ public partial class EnchantingUI : CanvasLayer
     private Action? _onCancel;
     private PlayerController? _player;
     private Hud? _hud;
+    private Label? _title;
+    private Label? _hint;
+
+    private const string EnchantTitle = "Enchant your wand";
+    private const string EditTitle = "Edit your wand's enchantment";
+    private const string EnchantHint = "Draw a rune (circle it to combine several), then press Identify.";
+    private const string EditHint = "The current rune is loaded — undo strokes with right click, redraw, then press Identify.";
 
     /// <summary>The embedded drawing canvas (used by tests).</summary>
     public DrawingSurface? Drawing => _drawing;
@@ -45,7 +52,7 @@ public partial class EnchantingUI : CanvasLayer
 
         Label title = new()
         {
-            Text = "Enchant your wand",
+            Text = EnchantTitle,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         title.AddThemeFontSizeOverride("font_size", 34);
@@ -55,10 +62,11 @@ public partial class EnchantingUI : CanvasLayer
         title.OffsetTop = 28f;
         title.OffsetBottom = 76f;
         AddChild(title);
+        _title = title;
 
         Label hint = new()
         {
-            Text = "Draw a rune (circle it to combine several), then press Identify.",
+            Text = EnchantHint,
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(1f, 1f, 1f, 0.75f),
         };
@@ -69,6 +77,7 @@ public partial class EnchantingUI : CanvasLayer
         hint.OffsetTop = 84f;
         hint.OffsetBottom = 112f;
         AddChild(hint);
+        _hint = hint;
 
         Button cancel = new() { Text = "Cancel" };
         cancel.Pressed += Cancel;
@@ -80,17 +89,27 @@ public partial class EnchantingUI : CanvasLayer
         AddChild(cancel);
     }
 
-    /// <summary>Opens the overlay; the callbacks run on cast / cancel.</summary>
+    /// <summary>
+    /// Opens the overlay; the callbacks run on cast / cancel. When
+    /// <paramref name="initialStrokes"/> is given (editing an existing
+    /// enchantment) the canvas starts with those strokes loaded.
+    /// </summary>
     public void Open(
         Action<string[], IReadOnlyList<IReadOnlyList<Vector2>>> onComplete,
-        Action? onCancel = null)
+        Action? onCancel = null,
+        IReadOnlyList<IReadOnlyList<Vector2>>? initialStrokes = null)
     {
         _onComplete = onComplete;
         _onCancel = onCancel;
         _player = GetTree().GetFirstNodeInGroup("player") as PlayerController;
         _hud = GetTree().GetFirstNodeInGroup("hud") as Hud;
 
+        bool editing = initialStrokes is { Count: > 0 };
+        if (_title is not null) _title.Text = editing ? EditTitle : EnchantTitle;
+        if (_hint is not null) _hint.Text = editing ? EditHint : EnchantHint;
+
         _drawing?.ClearDrawing();
+        if (editing) _drawing?.LoadStrokes(initialStrokes!);
         _player?.SetControlsEnabled(false);
         if (_hud is not null) _hud.Visible = false;
 

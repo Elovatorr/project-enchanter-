@@ -106,6 +106,27 @@ public partial class RoomSelfTest : Node
         Check("wand-attached-to-camera", wand.GetParent() == player.GetNode("Camera3D"));
         Check("wand-no-prompt", wand.InteractionPrompt.Length == 0, wand.InteractionPrompt);
 
+        // ---- Edit the enchantment at the table while holding the wand ----
+        Check("table-prompts-edit", table.InteractionPrompt.Contains("Edit"), table.InteractionPrompt);
+        Check("wand-remembers-rune", wand.CurrentStrokes.Count > 0, $"strokes={wand.CurrentStrokes.Count}");
+
+        table.Interact(player);
+        await WaitFrames(3);
+        Check("edit-ui-opens", ui.Visible);
+        Check("edit-controls-paused", !player.ControlsEnabled);
+        Check("edit-wand-closeup", wand.InCloseUp && wand.GetParent() == player.GetNode("Camera3D"));
+        Check("edit-canvas-prefilled",
+            ui.Drawing is not null && ui.Drawing.StrokeCount == wand.CurrentStrokes.Count,
+            $"canvas={ui.Drawing?.StrokeCount}, wand={wand.CurrentStrokes.Count}");
+
+        // Cancel keeps the enchantment and returns the wand to the hand.
+        ui.Cancel();
+        await WaitFrames(2);
+        Check("edit-cancel-keeps-enchantment", wand.Element == "fire" && wand.Held, wand.Element);
+        Check("edit-cancel-returns-to-hand",
+            wand.GetParent() == player.GetNode("Camera3D") && player.ControlsEnabled && !ui.Visible);
+        Check("edit-cancel-no-closeup", !wand.InCloseUp);
+
         // ---- Shooting via the real left-click pipeline ----
         Camera3D camera = player.GetNode<Camera3D>("Camera3D");
         Vector3 aim = -camera.GlobalTransform.Basis.Z;
@@ -166,6 +187,20 @@ public partial class RoomSelfTest : Node
         await ToSignal(GetTree().CreateTimer(2.7f), SceneTreeTimer.SignalName.Timeout);
         Check("shots-despawn-after-lifetime", Projectiles().Count == 0, $"projectiles={Projectiles().Count}");
 
+        // ---- Re-enchant by editing through the table while still held ----
+        table.Interact(player);
+        await WaitFrames(3);
+        Check("edit-again-ui-opens", ui.Visible && wand.InCloseUp);
+        ui.Drawing!.LoadStrokes(ScaledTemplate(RuneTemplates.Water, 90f, new Vector2(560f, 360f)));
+        await WaitFrames(1);
+        ui.Drawing.Identify();
+        await WaitFrames(4);
+        Check("edit-applies-new-element", wand.Element == "water", wand.Element);
+        Check("edit-closes-and-returns-to-hand",
+            !ui.Visible && !wand.InCloseUp && wand.Held && wand.GetParent() == player.GetNode("Camera3D"));
+        Check("edit-keeps-new-strokes", wand.CurrentStrokes.Count == RuneTemplates.Water.Strokes.Count,
+            $"strokes={wand.CurrentStrokes.Count}");
+
         GD.Print($"ROOMSELFTEST SUMMARY: passed={_passed} failed={_failed}");
         await WaitFrames(2);
         GetTree().Quit(_failed == 0 ? 0 : 1);
@@ -180,6 +215,19 @@ public partial class RoomSelfTest : Node
 
     /// <summary>Live shot projectiles (spawned by Wand.Shoot).</summary>
     private Godot.Collections.Array<Node> Projectiles() => GetTree().GetNodesInGroup("projectile");
+
+    /// <summary>Copies a rune template's strokes scaled and offset into canvas space.</summary>
+    private static List<List<Vector2>> ScaledTemplate(RuneTemplate rune, float scale, Vector2 offset)
+    {
+        List<List<Vector2>> strokes = [];
+        foreach (IReadOnlyList<Vector2> stroke in rune.Strokes)
+        {
+            List<Vector2> copy = [];
+            foreach (Vector2 p in stroke) copy.Add(p * scale + offset);
+            strokes.Add(copy);
+        }
+        return strokes;
+    }
 
     /// <summary>Sends a short stroke via the real input pipeline.</summary>
     private static void SendSyntheticStroke()

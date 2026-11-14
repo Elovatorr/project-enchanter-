@@ -15,6 +15,9 @@ public partial class Wand : StaticBody3D, IInteractable
     public bool Enchanted => Element.Length > 0;
     public bool Held { get; private set; }
 
+    /// <summary>The strokes of the rune currently etched on the wand (for editing).</summary>
+    public IReadOnlyList<IReadOnlyList<Vector2>> CurrentStrokes { get; private set; } = [];
+
     /// <summary>True while the wand is held up close for enchanting.</summary>
     public bool InCloseUp { get; private set; }
 
@@ -54,24 +57,26 @@ public partial class Wand : StaticBody3D, IInteractable
 
     /// <summary>
     /// Moves the wand in front of the camera, large and with its rune face
-    /// towards the viewer, for the enchanting overlay.
+    /// towards the viewer, for the enchanting overlay. Works while the wand is
+    /// held, so an existing enchantment can be edited; <see cref="EndCloseUp"/>
+    /// restores it to the hand.
     /// </summary>
     public void ShowCloseUp(Node3D camera)
     {
-        if (Held || InCloseUp) return;
+        if (InCloseUp) return;
 
         InCloseUp = true;
         _restoreParent = GetParent();
         _restoreTransform = GlobalTransform;
 
-        Reparent(camera, false);
+        if (GetParent() != camera) Reparent(camera, false);
         Position = new Vector3(0f, -0.05f, -0.42f);
         RotationDegrees = new Vector3(90f, 0f, 0f); // top face toward the camera
         Scale = new Vector3(1.4f, 1.4f, 1.4f);
         _collision.Disabled = true;
     }
 
-    /// <summary>Returns the wand to where it was before the close-up.</summary>
+    /// <summary>Returns the wand to where it was before the close-up (table or hand).</summary>
     public void EndCloseUp()
     {
         if (!InCloseUp) return;
@@ -79,7 +84,7 @@ public partial class Wand : StaticBody3D, IInteractable
         InCloseUp = false;
         if (_restoreParent is Node parent && IsInsideTree())
         {
-            Reparent(parent, false);
+            if (GetParent() != parent) Reparent(parent, false);
             GlobalTransform = _restoreTransform;
         }
         Scale = Vector3.One;
@@ -115,14 +120,11 @@ public partial class Wand : StaticBody3D, IInteractable
     public void Enchant(string element, IReadOnlyList<IReadOnlyList<Vector2>> strokes)
     {
         Element = element;
+        Color color = WandShotFactory.ColorFor(element);
 
-        Color color = element switch
-        {
-            "fire" => new Color(1f, 0.25f, 0.15f),
-            "water" => new Color(0.25f, 0.5f, 1f),
-            "density" => new Color(0.25f, 0.85f, 0.35f),
-            _ => new Color(1f, 0.8f, 0.3f),
-        };
+        List<List<Vector2>> runeStrokes = [];
+        foreach (IReadOnlyList<Vector2> stroke in strokes) runeStrokes.Add([.. stroke]);
+        CurrentStrokes = runeStrokes;
 
         _mesh.MaterialOverride = new StandardMaterial3D
         {

@@ -74,4 +74,20 @@ public class DrawingSurfaceModel
         _strokes.Clear();
         _currentStroke = null;
     }
+
+    /// <summary>
+    /// Replaces the drawing with copies of <paramref name="strokes"/> (used to
+    /// load a wand's existing rune for editing). Empty strokes are skipped and
+    /// any in-progress stroke is discarded.
+    /// </summary>
+    public void Load(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
+    {
+        _strokes.Clear();
+        _currentStroke = null;
+        foreach (IReadOnlyList<Vector2> stroke in strokes)
+        {
+            if (stroke.Count == 0) continue;
+            _strokes.Add([.. stroke]);
+        }
+    }
 }

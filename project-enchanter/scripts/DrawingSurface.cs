@@ -177,6 +177,17 @@ public partial class DrawingSurface : Node2D
         QueueRedraw();
     }
 
+    /// <summary>
+    /// Loads existing strokes into the canvas so the player can edit a rune that
+    /// is already enchanted (e.g. the wand's current rune).
+    /// </summary>
+    public void LoadStrokes(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
+    {
+        _model.Load(strokes);
+        _candidate = null;
+        QueueRedraw();
+    }
+
     private static List<List<Vector2>> SnapshotStrokes(IReadOnlyList<IReadOnlyList<Vector2>> strokes)
     {
         List<List<Vector2>> copy = [];
